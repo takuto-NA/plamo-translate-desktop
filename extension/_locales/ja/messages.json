@@ -286,6 +286,34 @@
   "pageNothing": {
     "message": "翻訳する文章がありません"
   },
+  "pdfOriginal": {
+    "message": "原文"
+  },
+  "pdfOpenSource": {
+    "message": "元の PDF を開く"
+  },
+  "pdfLoading": {
+    "message": "PDF を読み込んでいます…"
+  },
+  "pdfLoadFailed": {
+    "message": "PDF を読み込めませんでした: $ERROR$",
+    "placeholders": {
+      "error": {
+        "content": "$1"
+      }
+    }
+  },
+  "pdfFileAccess": {
+    "message": "パソコン上の PDF を読むには、拡張機能の詳細で「ファイルの URL へのアクセスを許可する」をオンにしてください。"
+  },
+  "pdfPages": {
+    "message": "$COUNT$ ページ",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
   "pageResume": {
     "message": "再開"
   },

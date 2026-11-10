@@ -286,6 +286,34 @@
   "pageNothing": {
     "message": "Nothing to translate"
   },
+  "pdfOriginal": {
+    "message": "Original"
+  },
+  "pdfOpenSource": {
+    "message": "Open the PDF"
+  },
+  "pdfLoading": {
+    "message": "Reading the PDF…"
+  },
+  "pdfLoadFailed": {
+    "message": "Could not read the PDF: $ERROR$",
+    "placeholders": {
+      "error": {
+        "content": "$1"
+      }
+    }
+  },
+  "pdfFileAccess": {
+    "message": "To read a PDF on this computer, turn on \"Allow access to file URLs\" in the extension's details."
+  },
+  "pdfPages": {
+    "message": "$COUNT$ pages",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
   "pageResume": {
     "message": "Resume"
   },

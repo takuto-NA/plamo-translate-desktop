@@ -299,15 +299,17 @@
     });
     if (!runs.length) return;
     if (!port) connect();
-    // Visible paragraphs first, then the rest in reading order.
+    // Visible paragraphs first, then those below, then those above (nearest first). Each group
+    // goes in document order, which is the reading order also where paragraphs stand side by
+    // side (columns, and the pages of the PDF viewer).
     const height = window.innerHeight;
-    const position = (run) => {
+    const group = (run) => {
       const top = anchor(run)?.getBoundingClientRect().top ?? 0;
-      return top >= -50 && top < height ? top - 1e9 : top < 0 ? 1e9 - top : top;
+      return top >= -50 && top < height ? 0 : top < 0 ? 2 : 1;
     };
     const items = runs
-      .map((run) => ({ run, position: position(run) }))
-      .sort((a, b) => a.position - b.position)
+      .map((run) => ({ run, group: group(run) }))
+      .sort((a, b) => a.group - b.group || inOrder(a.run, b.run) * (a.group === 2 ? -1 : 1))
       .map(({ run }) => {
         const { html, elements } = serialize(run);
         const sid = nextSid++;
@@ -576,6 +578,12 @@
     return run[0].nodeType === Node.ELEMENT_NODE ? run[0] : run[0].parentElement;
   }
 
+  /** -1 if run `a` comes before run `b` in the document, 1 if after. */
+  function inOrder(a, b) {
+    if (a[0] === b[0]) return 0;
+    return a[0].compareDocumentPosition(b[0]) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+  }
+
   // When scrolling stops, the paragraphs in view move to the front of the queue, and those that
   // came near are sent.
   let scrollTimer = null;
@@ -587,9 +595,9 @@
       if (!pending.size || !port) return;
       const height = window.innerHeight;
       const visible = [...pending.entries()]
-        .map(([sid, item]) => ({ sid, rect: anchor(item.run)?.getBoundingClientRect() }))
+        .map(([sid, item]) => ({ sid, run: item.run, rect: anchor(item.run)?.getBoundingClientRect() }))
         .filter(({ rect }) => rect && rect.bottom > -100 && rect.top < height + 100)
-        .sort((a, b) => a.rect.top - b.rect.top)
+        .sort((a, b) => inOrder(a.run, b.run))
         .map(({ sid }) => sid);
       if (visible.length) port?.postMessage({ type: "prioritize", sids: visible });
     }, 250);
@@ -623,7 +631,8 @@
       chrome.runtime.sendMessage({ type: "ui_messages" }).catch(() => null),
     ]);
     uiMessages = messages;
-    mode = settings.pageMode;
+    // The PDF viewer has room for one text in each paragraph's box: it asks for "replace".
+    mode = document.documentElement.dataset.plamoPageMode || settings.pageMode;
     showMarks = settings.pageMarks !== false;
     nearbyOnly = settings.pageNearby === true;
     style = settings.style;

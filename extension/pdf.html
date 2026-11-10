@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- page.js translates the paragraphs in place, as on any page, but never puts them below the original:
+     a paragraph's box has room for one text. -->
+<html data-plamo-page-mode="replace">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PLaMo Translate</title>
+    <link rel="stylesheet" href="pdf.css" />
+  </head>
+  <body>
+    <header class="toolbar" translate="no">
+      <img src="icons/icon-32.png" width="20" height="20" alt="" />
+      <span id="name" class="name"></span>
+      <span id="info" class="info"></span>
+      <label class="toggle"><input type="checkbox" id="original" /><span data-i18n="pdfOriginal"></span></label>
+      <a id="openSource" href="#" data-i18n="pdfOpenSource"></a>
+    </header>
+    <main id="pages"></main>
+    <p id="message" class="message" translate="no" hidden></p>
+    <script src="i18n.js"></script>
+    <script type="module" src="pdf-view.js"></script>
+  </body>
+</html>

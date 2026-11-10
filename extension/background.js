@@ -562,8 +562,58 @@ function onPanelMessage(port, message) {
 // ---- Page translation ----
 
 async function translatePage(tabId) {
+  // The extension's PDF viewer runs page.js itself.
+  const viewer = chrome.runtime.getURL("pdf.html");
+  const contexts = await chrome.runtime.getContexts({ contextTypes: ["TAB"], tabIds: [tabId] }).catch(() => []);
+  if (contexts.some((c) => c.documentUrl?.startsWith(viewer))) {
+    await chrome.runtime.sendMessage({ type: "pdf_translate", tabId }).catch(() => {});
+    return;
+  }
+  // A PDF shows in the browser's own viewer, which no extension can enter: its file is read in
+  // the tab (as the page would read it, with its cookies) and shown in the extension's viewer.
+  const [{ result: pdf } = {}] = await chrome.scripting.executeScript({ target: { tabId }, func: readPdf });
+  if (pdf) {
+    await openPdfViewer(tabId, pdf);
+    return;
+  }
   // page.js asks for the display language's messages ("ui_messages") when it starts.
   await chrome.scripting.executeScript({ target: { tabId }, files: ["i18n.js", "page.js"] });
+}
+
+/** PDF files read for the viewer, by key, until it takes them (or a minute passes). */
+const pdfFiles = new Map();
+
+/** Runs in the tab: its PDF as a data URL, or null if the tab shows no PDF. */
+async function readPdf() {
+  if (document.contentType !== "application/pdf") return null;
+  const url = location.href;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    const data = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+    return { url, data };
+  } catch (e) {
+    // The viewer then reads it from its address (a file needs the access to file URLs).
+    return { url, error: String(e?.message ?? e) };
+  }
+}
+
+/** Opens the viewer next to the tab, which translates the PDF as it shows it. */
+async function openPdfViewer(tabId, pdf) {
+  const key = crypto.randomUUID();
+  if (pdf.data) {
+    pdfFiles.set(key, pdf.data);
+    setTimeout(() => pdfFiles.delete(key), 60000);
+  }
+  const tab = await chrome.tabs.get(tabId);
+  const url = chrome.runtime.getURL(`pdf.html?${new URLSearchParams({ src: pdf.url, key })}`);
+  await chrome.tabs.create({ url, windowId: tab.windowId, index: tab.index + 1, openerTabId: tabId });
 }
 
 function onPageMessage(port, message) {
@@ -687,6 +737,12 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "pdf_data") {
+    // Once: the viewer reads the file again from its address when reloaded.
+    sendResponse({ data: pdfFiles.get(message.key) ?? null });
+    pdfFiles.delete(message.key);
+    return false;
+  }
   if (message?.type !== "ui_messages") return false;
   languageReady.then(() => sendResponse(uiMessages ?? null));
   return true;
