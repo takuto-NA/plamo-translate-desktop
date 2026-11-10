@@ -11,6 +11,7 @@ mod backend;
 mod browser;
 mod lang;
 mod models;
+mod shell;
 mod view;
 
 // Shared with the browser host; re-exported so the app refers to them as its own modules.
@@ -18,10 +19,7 @@ pub(crate) use appdata::{app_log, applog, glossary, settings};
 
 use std::path::PathBuf;
 
-use gpui_kit::component::TitleBar;
 use gpui_kit::*;
-
-use crate::view::TranslatorView;
 
 rust_i18n::i18n!("locales", fallback = "en");
 
@@ -32,16 +30,15 @@ fn custom_model() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-/// What a macOS application has to set up itself: GPUI adds no menu bar and no Cmd+Q.
+/// What a macOS application has to set up itself: GPUI adds no menu bar (Cmd+Q is bound by
+/// [`shell::init`] on every system).
 #[cfg(target_os = "macos")]
 mod macos {
     use gpui_kit::*;
 
-    actions!(plamo_translate, [Quit]);
+    use crate::shell::Quit;
 
     pub fn init(cx: &mut App) {
-        cx.on_action(|_: &Quit, cx: &mut App| cx.quit());
-        cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
         cx.set_menus(vec![Menu {
             name: "PLaMo Translate".into(),
             items: vec![MenuItem::action("Quit PLaMo Translate", Quit)],
@@ -91,44 +88,33 @@ fn main() {
     // Shared with gpui-component, so its built-in strings follow the same locale.
     rust_i18n::set_locale(settings.ui_language.locale());
 
-    gpui_kit::application()
+    // Starting the app again shows the running one's window instead.
+    let messages = shell::messages();
+    let instance = match shell::claim(&messages.0) {
+        Ok(Some(instance)) => Some(instance),
+        Ok(None) => {
+            app_log!("already running: asked that instance to show its window");
+            return;
+        }
+        Err(e) => {
+            app_log!("cannot reach the running instance, or become it: {e}");
+            None
+        }
+    };
+
+    // The shell decides whether the last window closing quits the app: not when it stays
+    // resident (on macOS too, where the Dock opens the window again).
+    let app = gpui_kit::application()
         .with_assets(assets::AppAssets)
-        // The default on macOS keeps the process running without a window, which cannot be
-        // reopened here. Windows and Linux already quit with the last window.
-        .with_quit_mode(QuitMode::LastWindowClosed)
-        .run(move |cx| {
-            gpui_kit::init(cx);
-            view::bind_keys(cx);
-            #[cfg(target_os = "macos")]
-            macos::init(cx);
-            // A larger UI size opens a larger window too, within the screen.
-            let scale = settings.ui_scale_factor();
-            let screen = cx.primary_display().map(|d| d.bounds().size);
-            let fit = |width: f32, height: f32| {
-                let (max_width, max_height) = screen.map_or((f32::MAX, f32::MAX), |s| {
-                    (f32::from(s.width) * 0.9, f32::from(s.height) * 0.9)
-                });
-                size(
-                    px((width * scale).min(max_width)),
-                    px((height * scale).min(max_height)),
-                )
-            };
-            let options = WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
-                    None,
-                    fit(1100., 720.),
-                    cx,
-                ))),
-                window_min_size: Some(fit(640., 400.)),
-                // Matches the desktop entry name on Linux, so the window gets its icon.
-                app_id: Some("plamo-translate-desktop".into()),
-                ..TitleBar::window_options()
-            };
-            gpui_kit::open_window(options, cx, |window, cx| {
-                view::apply_appearance(&settings, window, cx);
-                cx.new(|cx| TranslatorView::new(custom_model, settings, window, cx))
-            })
-            .expect("failed to open the main window");
-            cx.activate(true);
-        });
+        .with_quit_mode(QuitMode::Explicit);
+    app.on_reopen(|cx| shell::show(None, cx));
+    app.run(move |cx| {
+        gpui_kit::init(cx);
+        view::bind_keys(cx);
+        shell::init(custom_model, instance, messages, &settings, cx);
+        #[cfg(target_os = "macos")]
+        macos::init(cx);
+        shell::open_window(settings, None, cx).expect("failed to open the main window");
+        cx.activate(true);
+    });
 }

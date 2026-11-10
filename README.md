@@ -26,12 +26,18 @@ locally on your computer. It works offline once a model is downloaded. Written i
 - Light and dark themes. The default follows the OS; Settings can fix either one.
 - **UI size** in Settings (100–200%) enlarges the interface on top of the display scaling of the OS, for a high-DPI display the desktop does not scale.
 - The source and the translation scroll together, and moving the caret in one selects the corresponding paragraph in the other (can be turned off in Settings).
+- **Translate when copied twice** (Settings, off by default): select text in any application and press `Ctrl+C` twice quickly (`Cmd+C` on macOS),
+  and the app's window comes to the front and translates it. Only the clipboard is watched, not the keyboard, so no permission is needed.
+  On Linux this needs X11, or Xwayland in a Wayland session.
+- **Keep running when the window is closed** (Settings, off by default): the app keeps running without its window, and releases the model meanwhile.
+  The window opens again from the icon in the notification area (Windows), the Dock (macOS), or by starting the app again (Linux).
+  Starting the app while it runs brings its window to the front.
 - Updates: the app asks GitHub at most once a day whether a newer release is out, and the status bar then says so.
   Clicking it downloads the new version (checked against `SHA256SUMS.txt`), and **Restart to update** then starts the new version.
   Files you added to the app's folder stay. A build from source only links to the release page.
   **Check for new versions** in Settings turns the check off; **Check now** there asks at once, next to the app's version.
 
-Shortcuts: `Ctrl+Enter` translates now. `Ctrl+Shift+C` copies the translation. On macOS these are `Cmd+Enter` and `Cmd+Shift+C`.
+Shortcuts: `Ctrl+Enter` translates now. `Ctrl+Shift+C` copies the translation. `Ctrl+Q` quits. On macOS these are `Cmd+Enter`, `Cmd+Shift+C`, and `Cmd+Q`.
 
 ## Models and their license
 

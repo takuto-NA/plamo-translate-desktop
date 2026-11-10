@@ -6,7 +6,13 @@ All notable changes to PLaMo Translate Desktop. Each release's section here also
 
 ### Added
 
+- **Translate when copied twice** in Settings ([#7](https://github.com/tanakh/plamo-translate-desktop/issues/7)): select text in any application and press Ctrl+C twice quickly (⌘C on macOS), and the app's window comes to the front and translates it. Only the clipboard is watched, not the keyboard, so no permission is needed. Off by default. On Linux it needs X11, or Xwayland in a Wayland session.
+- **Keep running when the window is closed** in Settings: the app keeps running without its window, which opens again from the icon in the notification area (Windows), the Dock (macOS), or by starting the app again (Linux). The model is released meanwhile and loaded again when the window opens. Off by default. Ctrl+Q (⌘Q) quits.
 - **Keyboard shortcuts** under **Settings** in the browser extension's panel shows the keys of its shortcuts, and **Set in the browser** opens the browser's page where they are set (`chrome://extensions/shortcuts`, or `edge://extensions/shortcuts` in Edge). The browser does not let an extension set its keys itself.
+
+### Changed
+
+- Starting the app while it runs brings its window to the front, instead of starting a second copy that loads the model again.
 
 ## [0.5.0] - 2026-11-10
 
