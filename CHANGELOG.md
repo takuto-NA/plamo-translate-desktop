@@ -2,6 +2,17 @@
 
 All notable changes to PLaMo Translate Desktop. Each release's section here also becomes its release notes on GitHub.
 
+## [Unreleased]
+
+### Added
+
+- **Translate when copied twice** in Settings ([#7](https://github.com/tanakh/plamo-translate-desktop/issues/7)): select text in any application and press Ctrl+C twice quickly (⌘C on macOS), and the app's window comes to the front and translates it. Only the clipboard is watched, not the keyboard, so no permission is needed. Off by default. On Linux it needs X11, or Xwayland in a Wayland session.
+- **Keep running when the window is closed** in Settings: the app keeps running without its window, which opens again from the icon in the notification area (Windows), the Dock (macOS), or by starting the app again (Linux). The model is released meanwhile and loaded again when the window opens. Off by default. Ctrl+Q (⌘Q) quits.
+
+### Changed
+
+- Starting the app while it runs brings its window to the front, instead of starting a second copy that loads the model again.
+
 ## [0.5.0] - 2026-11-10
 
 ### Added
@@ -127,6 +138,7 @@ The first release.
 - English and Japanese UI, light and dark themes, and synchronized scrolling between the source and the translation.
 - Packages for Windows and Linux (x86-64), with third-party notices.
 
+[Unreleased]: https://github.com/tanakh/plamo-translate-desktop/compare/v0.5.0...HEAD
 [0.5.0]: https://github.com/tanakh/plamo-translate-desktop/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/tanakh/plamo-translate-desktop/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tanakh/plamo-translate-desktop/compare/v0.2.1...v0.3.0

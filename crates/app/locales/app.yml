@@ -583,6 +583,36 @@ settings.ui_scale:
 settings.ui_scale_note:
   en: "On top of the display scaling of the OS. For a high-DPI display that the desktop does not scale (some Linux desktops)."
   ja: "OS の表示スケールに上乗せします。高解像度のディスプレイを OS が拡大しない場合（一部の Linux デスクトップ）に使ってください。"
+settings.double_copy:
+  en: Translate when copied twice
+  ja: 2 回コピーで翻訳する
+settings.double_copy_note:
+  en: "Select text in any application and press Ctrl+C twice quickly (⌘C on macOS): this window comes to the front and translates it. Only the clipboard is watched, not the keyboard. To use this with the window closed, also turn on “Keep running when the window is closed”."
+  ja: "どのアプリでも、テキストを選んで Ctrl+C（macOS では ⌘C）を素早く 2 回押すと、このウィンドウが前面に出て翻訳します。見るのはクリップボードだけで、キーボードの入力は見ません。ウィンドウを閉じた後も使うには「ウィンドウを閉じても常駐する」もオンにしてください。"
+settings.double_copy_failed:
+  en: "Cannot watch the clipboard: %{message}"
+  ja: "クリップボードを監視できません: %{message}"
+settings.double_copy_no_x11:
+  en: "Not available here: watching the clipboard needs X11 (in a Wayland session, Xwayland), and DISPLAY is not set."
+  ja: "この環境では使えません。クリップボードを見るには X11（Wayland のセッションでは Xwayland）が必要ですが、DISPLAY が設定されていません。"
+settings.resident:
+  en: Keep running when the window is closed
+  ja: ウィンドウを閉じても常駐する
+settings.resident_note_windows:
+  en: "The icon in the notification area opens the window again, and its menu quits the app (as Ctrl+Q does). The model is released while the window is closed, and loaded again when it opens."
+  ja: "通知領域のアイコンでウィンドウを開き直し、そのメニューでアプリを終了します（Ctrl+Q でも終了します）。ウィンドウを閉じている間はモデルをメモリから外し、開くときに読み込み直します。"
+settings.resident_note_macos:
+  en: "The app's icon in the Dock opens the window again; ⌘Q quits the app. The model is released while the window is closed, and loaded again when it opens."
+  ja: "Dock のアイコンでウィンドウを開き直します。⌘Q でアプリを終了します。ウィンドウを閉じている間はモデルをメモリから外し、開くときに読み込み直します。"
+settings.resident_note_linux:
+  en: "Starting the app again opens the window; Ctrl+Q quits the app. The model is released while the window is closed, and loaded again when it opens."
+  ja: "アプリをもう一度起動するとウィンドウが開きます。Ctrl+Q でアプリを終了します。ウィンドウを閉じている間はモデルをメモリから外し、開くときに読み込み直します。"
+tray.open:
+  en: Open PLaMo Translate
+  ja: PLaMo Translate を開く
+tray.quit:
+  en: Quit
+  ja: 終了
 
 models.quality_legend:
   en: "Quality (higher is better): Ja↔En = PFTB, multilingual = FLORES+ chrF++ (Ja↔14 languages). In parentheses: difference from the unquantized model."

@@ -299,6 +299,15 @@ pub fn apply_appearance(settings: &Settings, window: &mut Window, cx: &mut App) 
     window.refresh();
 }
 
+/// How the window opens again while the app stays resident.
+const RESIDENT_NOTE: &str = if cfg!(windows) {
+    "settings.resident_note_windows"
+} else if cfg!(target_os = "macos") {
+    "settings.resident_note_macos"
+} else {
+    "settings.resident_note_linux"
+};
+
 pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([KeyBinding::new(
         COPY_TRANSLATION_KEY,
@@ -1184,7 +1193,17 @@ impl TranslatorView {
                     UpdateCheck::Idle,
                     (browser::Registration::NotRegistered, None),
                 ));
+            let (double_copy, resident) = view
+                .upgrade()
+                .map(|view| {
+                    let settings = &view.read(cx).settings;
+                    (settings.double_copy, settings.resident)
+                })
+                .unwrap_or_default();
+            let watch_error = crate::shell::watch_error(cx);
             let toggle_view = view.clone();
+            let double_copy_view = view.clone();
+            let resident_view = view.clone();
             let updates_view = view.clone();
             let check_view = view.clone();
             let browser_view = view.clone();
@@ -1243,6 +1262,41 @@ impl TranslatorView {
                                 .text_xs()
                                 .text_color(muted)
                                 .child(t!("settings.sync_scroll_note").into_owned()),
+                        )
+                        .child(
+                            Switch::new("double-copy")
+                                .checked(double_copy)
+                                .label(t!("settings.double_copy").into_owned())
+                                .on_click(move |checked: &bool, window, cx| {
+                                    let _ = double_copy_view
+                                        .update(cx, |this, cx| this.set_double_copy(*checked, cx));
+                                    window.refresh();
+                                }),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(muted)
+                                .child(t!("settings.double_copy_note").into_owned()),
+                        )
+                        .children(watch_error.map(|message| {
+                            div().text_xs().text_color(cx.theme().danger).child(message)
+                        }))
+                        .child(
+                            Switch::new("resident")
+                                .checked(resident)
+                                .label(t!("settings.resident").into_owned())
+                                .on_click(move |checked: &bool, window, cx| {
+                                    let _ = resident_view
+                                        .update(cx, |this, cx| this.set_resident(*checked, cx));
+                                    window.refresh();
+                                }),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(muted)
+                                .child(t!(RESIDENT_NOTE).into_owned()),
                         )
                         .child(
                             Switch::new("check-updates")
@@ -1342,6 +1396,7 @@ impl TranslatorView {
         crate::app_log!("UI language set to {language:?} ({locale})");
         rust_i18n::set_locale(locale);
         self.refresh_locale(window, cx);
+        crate::shell::refresh_tray(cx);
     }
 
     /// Rebuilds the strings that were baked into child components when they were created.
@@ -2350,6 +2405,40 @@ impl TranslatorView {
             if enabled { "on" } else { "off" }
         );
         self.link_selection_focus(cx);
+        cx.notify();
+    }
+
+    fn set_double_copy(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        if self.settings.double_copy == enabled {
+            return;
+        }
+        self.settings.double_copy = enabled;
+        self.settings.save();
+        crate::app_log!("double copy {}", if enabled { "on" } else { "off" });
+        crate::shell::set_double_copy(enabled, cx);
+        cx.notify();
+    }
+
+    fn set_resident(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        if self.settings.resident == enabled {
+            return;
+        }
+        self.settings.resident = enabled;
+        self.settings.save();
+        crate::app_log!("staying resident {}", if enabled { "on" } else { "off" });
+        crate::shell::set_resident(enabled, cx);
+        cx.notify();
+    }
+
+    /// Puts `text` in the source and translates it, with Auto off too: a double copy in another
+    /// application asks for it.
+    pub fn translate_text(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.source.update(cx, |state, cx| {
+            state.set_value(SharedString::from(text), window, cx)
+        });
+        self.source_info = None;
+        self.source_version += 1;
+        self.translate_now(window, cx);
         cx.notify();
     }
 

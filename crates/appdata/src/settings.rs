@@ -71,6 +71,12 @@ pub struct Settings {
     pub sync_scroll: bool,
     /// Ask GitHub for a newer release, at most once a day.
     pub check_updates: bool,
+    /// Translate the clipboard when it is copied to twice in quick succession, in any
+    /// application (Ctrl+C or ⌘C pressed twice).
+    pub double_copy: bool,
+    /// Keep running when the window is closed: the notification-area icon (Windows), the Dock
+    /// (macOS), or starting the app again opens it.
+    pub resident: bool,
 }
 
 impl Default for Settings {
@@ -87,6 +93,8 @@ impl Default for Settings {
             document: DocumentSettings::default(),
             sync_scroll: true,
             check_updates: true,
+            double_copy: false,
+            resident: false,
         }
     }
 }

@@ -16,6 +16,7 @@ pfml = { path = "crates/pfml" }
 engine = { path = "crates/engine" }
 appdata = { path = "crates/appdata" }
 update = { path = "crates/update" }
+desktop = { path = "crates/desktop" }
 
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }

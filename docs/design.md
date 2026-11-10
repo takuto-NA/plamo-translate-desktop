@@ -71,6 +71,8 @@ crates/
             examples/translate.rs and examples/download.rs are headless CLIs for testing.
   appdata/  Settings, file locations, logging, device selection: shared by app and host.
   update/   Newer releases on GitHub: the check, its once-a-day cache, version order.
+  desktop/  Outside the window: double copy, the one running instance, and the
+            notification-area icon on Windows (§9.1).
   app/      GPUI application (binary `plamo-translate-desktop`).
   host/     Native messaging host for the browser extension (binary `plamo-translate-host`).
 extension/  Browser extension (Manifest V3) for Chrome and Edge; vendor/wllama is the
@@ -105,6 +107,8 @@ GPUI main thread ──Command──▶ inference worker (one std::thread, owns 
 - The UI receives events through `async-channel` and applies them in batches of one 50 ms frame,
   so a fast GPU does not stall the UI thread.
 - Download threads throttle progress events to about 10 Hz.
+- The clipboard watcher and the instance listener (§9.1) run on threads of their own and send to the UI
+  through an `async-channel` (`shell::Message`).
 
 ## 5. Prompt construction (crate `pfml`)
 
@@ -430,13 +434,48 @@ The implementation is `engine::llama::Session` (one llama.cpp context of a loade
 - The change applies immediately. Components that baked strings in when they were created (select items, placeholders) are rebuilt,
   and everything else is translated at render time.
 
-Future idea: a global hotkey that translates the clipboard (with the `global-hotkey` crate).
+### 9.1 Outside the window
+
+`crates/desktop` holds the platform code, and `crates/app/src/shell.rs` what the app does with it, outside any window.
+
+- One instance per user (`desktop::instance`). The first holds a lock file, `plamo-translate-desktop.lock` in `$XDG_RUNTIME_DIR` on Linux
+  and in the temporary directory on Windows and macOS (per user there). The system releases it when the process ends, also after a crash.
+  - A second start finds the lock taken, asks the running instance to show its window, and exits. On Windows the request goes to
+    a hidden window found by its class, after `AllowSetForegroundWindow` so that the running one may take the foreground;
+    elsewhere it goes through a Unix socket next to the lock.
+  - The update helper starts the new version only after the old one has exited (§11), so the two never meet.
+  - If the check fails, the app runs on its own, as before.
+- Staying resident (Settings, off by default). GPUI runs with `QuitMode::Explicit`, and the shell quits when the last window closes unless the app stays resident.
+  - The window's view owns the worker, so closing the window releases the model. The next window is a new `TranslatorView`,
+    with the settings read from disk, and loads the model again.
+  - Windows: the notification-area icon opens the window (click, or Open in its menu) and quits the app (Quit). The instance's hidden window owns it
+    and adds it again when Explorer restarts (`TaskbarCreated`).
+  - macOS: the Dock opens the window (`on_reopen`).
+  - Linux: starting the app again opens the window. A tray icon (StatusNotifierItem) needs a host, which GNOME has only with an extension, and WSLg not at all.
+  - `Ctrl+Q` (`Cmd+Q`) quits on every system.
+- Double copy (Settings, off by default; `desktop::clipboard`, issue #7): the clipboard changing twice within 500 ms. Changes within 60 ms of the previous one
+  count as one copy, since some applications write the clipboard more than once per copy.
+  - Only the clipboard is watched, never the keyboard: no permission, no key hook, and Ctrl+C works as before.
+    A second Ctrl+C with nothing selected leaves the clipboard as it was, so an old clipboard is not translated.
+  - The shell then shows the window and translates the text, also with Auto off. A double copy while the app's own window is active
+    (the copy button clicked twice) is ignored.
+  - Windows: `AddClipboardFormatListener`, on a message-only window of the watcher's thread. The text is read at the second copy only,
+    which spares the copying application from rendering text for every copy.
+  - macOS: `NSPasteboard.changeCount`, polled every 40 ms. The text is read at the second copy only. Apple has announced an alert for apps that read
+    the pasteboard without a paste by the user (not on by default yet); reading only at a double copy keeps such an alert to that moment.
+  - Linux: the X server's selection-owner events (XFixes); in a Wayland session, Xwayland's, which follows the Wayland clipboard.
+    A bridged clipboard changes more than once per copy, first without text: WSLg announces a copy made in Windows before its text arrives, 100–300 ms later.
+    So the text is read at every change; a change without text does not count, and the two copies must hold the same text.
+    Without `DISPLAY` the setting says it is unavailable. Text too large for one transfer (INCR) is not read.
+  - Rejected: a keyboard hook, which needs the Accessibility or Input Monitoring permission on macOS. An ad-hoc signed app loses that grant
+    at every update, as the grant is tied to the signature. A global hotkey that copies the selection itself needs the same permission.
 
 ## 10. Settings
 
 The app saves `settings.json` in the platform config directory (`crates/appdata/src/settings.rs`, shared with the host):
 the selected model, the models folder if not the default, the license acceptance, the device and the last device measurement, the glossary, the UI language,
-the theme, the UI size, the chunk and history sizes, synchronized scrolling, and whether to check for new versions.
+the theme, the UI size, the chunk and history sizes, synchronized scrolling, whether to check for new versions,
+the double copy, and staying resident.
 The language pair, style, context, auto-translate flag, and window geometry are not saved.
 A file that does not parse (or is not UTF-8; a byte order mark is skipped) is kept as `settings.json.invalid`
 instead of being overwritten.
@@ -723,7 +762,7 @@ Possible later work:
 - Reuse the KV cache prefix between chunks (each request starts from an empty cache today).
 - Partial GPU offload for models larger than the GPU memory.
 - An AppImage or distribution packages for Linux; signing the Windows executable; notarizing the macOS app.
-- A global hotkey that translates the clipboard.
+- A shortcut that translates the clipboard (besides the double copy), the macOS Services menu, and a tray icon on Linux (§9.1).
 - Remote inference backends (§1).
 
 ## 14. Risks
