@@ -1,6 +1,6 @@
 # PLaMo Translate Desktop — Design
 
-Status: describes the code of v0.5.0 (released 2026-11-10). Update it together with the code.
+Status: describes the code after v0.5.0 (released 2026-11-10), towards v0.6.0. Update it together with the code.
 
 ## 1. Goal
 

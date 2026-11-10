@@ -189,7 +189,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "appdata"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "chrono",
  "directories",
@@ -1221,7 +1221,7 @@ dependencies = [
 
 [[package]]
 name = "desktop"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
@@ -1430,7 +1430,7 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 
 [[package]]
 name = "engine"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "llama-cpp-2",
@@ -4646,7 +4646,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pfml"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "thiserror 2.0.21",
 ]
@@ -4783,7 +4783,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "plamo-translate-desktop"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "appdata",
  "async-channel",
@@ -4800,7 +4800,7 @@ dependencies = [
 
 [[package]]
 name = "plamo-translate-host"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "appdata",
  "engine",
@@ -6917,7 +6917,7 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "update"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "flate2",
  "serde",
