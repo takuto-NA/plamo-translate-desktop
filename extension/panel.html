@@ -55,6 +55,14 @@
         <label class="check"><input type="checkbox" id="parallelPages" /><span data-i18n="parallelPages"></span></label>
         <p class="hint check-hint" data-i18n="parallelPagesHint"></p>
       </div>
+      <!-- Only the browser sets the keys, on its own page: the panel shows them and links there. -->
+      <div class="shortcuts">
+        <div class="shortcuts-header">
+          <span data-i18n="shortcuts"></span>
+          <a id="shortcutsLink" href="#" data-i18n="shortcutsChange" data-i18n-title="shortcutsChangeTitle"></a>
+        </div>
+        <div id="shortcutRows" class="shortcut-rows"></div>
+      </div>
       <label><span data-i18n="uiLanguage"></span><select id="uiLanguage"></select></label>
       <!-- Only in the extension's own package: the app's copy is updated with the app. -->
       <div id="checkUpdatesRow" hidden>

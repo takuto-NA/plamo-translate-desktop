@@ -101,9 +101,10 @@ Install the app first (see [Download](#download)), then:
    On macOS the folder is inside the app, which the dialog does not open: press `Cmd+Shift+G` in it and enter
    `/Applications/PLaMo Translate Desktop.app/Contents/Resources/browser-extension`.
 3. Select text on a page, right-click, and choose **Translate with PLaMo**: the side panel shows the translation as it streams in.
-   The toolbar button opens the panel to type or paste text. A keyboard shortcut set at `chrome://extensions/shortcuts` translates the selected text too.
+   The toolbar button opens the panel to type or paste text. A keyboard shortcut translates the selected text too: **Keyboard shortcuts** under **Settings** in the panel shows the keys
+   and opens the browser's page where they are set (`chrome://extensions/shortcuts`; none is set at first).
 4. To translate a whole page, right-click it and choose **Translate this page with PLaMo** (or **Translate this page** in the panel,
-   or a keyboard shortcut set at `chrome://extensions/shortcuts`).
+   or its keyboard shortcut).
    The browser lets the panel's button into a tab only after the right-click menu or one of the shortcuts was used on it (the toolbar button
    does not count), until the tab goes to another site; on other tabs the panel offers to allow the extension on all sites.
    Paragraphs are translated in place, keeping links and formatting: those in view first, and when you scroll, the ones you scrolled to.

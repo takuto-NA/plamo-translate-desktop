@@ -191,6 +191,21 @@
   "commandTranslateSelection": {
     "message": "Translate the selected text"
   },
+  "commandOpenPanel": {
+    "message": "Open the panel"
+  },
+  "shortcuts": {
+    "message": "Keyboard shortcuts"
+  },
+  "shortcutsChange": {
+    "message": "Set in the browser"
+  },
+  "shortcutsChangeTitle": {
+    "message": "Opens the browser's page for the shortcuts of extensions, where the keys are set. The browser does not let an extension set them."
+  },
+  "shortcutNone": {
+    "message": "Not set"
+  },
   "translatePage": {
     "message": "Translate this page"
   },

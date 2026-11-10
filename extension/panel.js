@@ -130,6 +130,47 @@ $("licenseAccept").addEventListener("click", () => {
   renderBrowserModels();
 });
 
+// ---- Keyboard shortcuts ----
+// An extension can read its keys but not set them (chrome.commands has no setter), so the panel
+// shows them and links to the browser's page where they are set.
+
+/** The commands' names in the display language: the manifest's follow the browser's. */
+const COMMAND_LABELS = {
+  _execute_action: "commandOpenPanel",
+  "translate-page": "translatePage",
+  "translate-selection": "commandTranslateSelection",
+};
+const SHORTCUTS_PAGE = navigator.userAgentData?.brands?.some((b) => b.brand === "Microsoft Edge")
+  ? "edge://extensions/shortcuts"
+  : "chrome://extensions/shortcuts";
+/** The commands and their keys, as chrome.commands.getAll gives them. */
+let commands = [];
+
+async function loadShortcuts() {
+  commands = await chrome.commands.getAll();
+  renderShortcuts();
+}
+
+function renderShortcuts() {
+  const cells = commands.flatMap(({ name, description, shortcut }) => {
+    const label = document.createElement("span");
+    label.textContent = COMMAND_LABELS[name] ? t(COMMAND_LABELS[name]) : description;
+    const key = document.createElement(shortcut ? "kbd" : "span");
+    key.textContent = shortcut || t("shortcutNone");
+    if (!shortcut) key.className = "none";
+    return [label, key];
+  });
+  $("shortcutRows").replaceChildren(...cells);
+}
+
+$("shortcutsLink").addEventListener("click", (e) => {
+  e.preventDefault();
+  chrome.tabs.create({ url: SHORTCUTS_PAGE });
+});
+// The keys change on the browser's page: they are read again when the panel is back in use.
+window.addEventListener("focus", loadShortcuts);
+$("settings").addEventListener("toggle", () => $("settings").open && loadShortcuts());
+
 function updateStyleVisibility() {
   // Style applies to Japanese only; "auto" may translate into Japanese.
   const target = $("target").value;
@@ -163,6 +204,7 @@ function applyLanguage() {
   }
   if (shownStatus) renderStatus(shownStatus);
   renderEngineTexts();
+  renderShortcuts();
   renderPageButton();
   setTranslating(currentId !== null);
   $("progress").textContent = progress();
@@ -250,6 +292,7 @@ const ready = Promise.all([
   updateStyleVisibility();
   for (const key of Object.keys(choices)) Object.assign(choices[key], saved[key]);
   licenseAccepted = saved.licenseAccepted;
+  loadShortcuts();
 });
 
 // Text selected in a page arrives through session storage (see requestPanel in background.js),

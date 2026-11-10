@@ -2,6 +2,12 @@
 
 All notable changes to PLaMo Translate Desktop. Each release's section here also becomes its release notes on GitHub.
 
+## [Unreleased]
+
+### Added
+
+- **Keyboard shortcuts** under **Settings** in the browser extension's panel shows the keys of its shortcuts, and **Set in the browser** opens the browser's page where they are set (`chrome://extensions/shortcuts`, or `edge://extensions/shortcuts` in Edge). The browser does not let an extension set its keys itself.
+
 ## [0.5.0] - 2026-11-10
 
 ### Added
@@ -127,6 +133,7 @@ The first release.
 - English and Japanese UI, light and dark themes, and synchronized scrolling between the source and the translation.
 - Packages for Windows and Linux (x86-64), with third-party notices.
 
+[Unreleased]: https://github.com/tanakh/plamo-translate-desktop/compare/v0.5.0...HEAD
 [0.5.0]: https://github.com/tanakh/plamo-translate-desktop/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/tanakh/plamo-translate-desktop/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tanakh/plamo-translate-desktop/compare/v0.2.1...v0.3.0

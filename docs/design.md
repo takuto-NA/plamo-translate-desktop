@@ -576,12 +576,16 @@ or, from v0.4.0, on its own with an in-browser engine (see "In-browser engine" b
     The selection is read once, at the press, only in the frame where the keyboard is (opening the panel takes the focus, so `document.hasFocus()`
     cannot tell), and never from masked fields. Pressed while the keyboard is in the panel, shown for a while, it leaves the panel's text as it is:
     the page's selection is then an old one. The keyboard moves to the panel only when the panel opens; F6 reaches an open one.
+  - The panel's settings list the shortcuts with their keys (`chrome.commands.getAll`) and link to the browser's page for them
+    (`chrome://extensions/shortcuts`, `edge://` in Edge, opened with `chrome.tabs.create` since a page cannot link there).
+    Chromium lets an extension read its keys but not set them, and tells no change (no `commands.onChanged`, unlike Firefox),
+    so the panel reads them again when it gets the focus or its settings open.
   - Requests to the panel (from the context menu and the selection shortcut) go through session storage with their window; only that window's panel takes them.
     One not taken within 30 s (that panel did not open) is dropped by the next panel that sees it, so opening the panel there later does not translate an old selection.
   - Texts come from `_locales` through `i18n.js` (shared by the panel, the background, and `page.js`). They follow the browser
     (`chrome.i18n`) unless the panel's display language picks a locale, whose `messages.json` is then read and filled in the same way;
     `page.js` gets those messages from the background (`ui_messages`) instead of reading the files itself.
-    The manifest's name and description, and the shortcut's description, always follow the browser.
+    The manifest's name and description, and the shortcuts' descriptions on the browser's page, always follow the browser.
   - The background service worker (`background.js`) holds the one native port and shares it: panel translations start at once
     (interrupting a page batch, whose unfinished paragraphs go back to the queue), and page paragraphs go to the host in batches
     of up to 10 paragraphs or 2,000 characters while nothing else runs. Chrome keeps the worker alive while the port is open.

@@ -191,6 +191,21 @@
   "commandTranslateSelection": {
     "message": "選択した文章を翻訳"
   },
+  "commandOpenPanel": {
+    "message": "パネルを開く"
+  },
+  "shortcuts": {
+    "message": "キーボード ショートカット"
+  },
+  "shortcutsChange": {
+    "message": "ブラウザで設定"
+  },
+  "shortcutsChangeTitle": {
+    "message": "拡張機能のショートカットを設定するブラウザの画面を開きます。キーは拡張機能からは設定できません。"
+  },
+  "shortcutNone": {
+    "message": "未設定"
+  },
   "translatePage": {
     "message": "このページを翻訳"
   },

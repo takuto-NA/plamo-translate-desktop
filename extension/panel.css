@@ -63,6 +63,13 @@ details label.check span { width: auto; flex: 1; }
 .measure-row #measured { flex: 1; min-width: 0; word-break: keep-all; }
 .measure-row button { flex: none; }
 .nowrap { white-space: nowrap; }
+/* Each command and its key, aligned with the selects; a command without a key says so, muted. */
+.shortcuts { margin-top: 6px; }
+.shortcuts-header { display: flex; align-items: baseline; gap: 8px; }
+.shortcuts-header span { flex: 1; }
+.shortcut-rows { margin: 2px 0 0 calc(5em + 8px); display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font-size: 12px; }
+.shortcut-rows .none { color: var(--muted); }
+kbd { font: inherit; padding: 0 4px; border: 1px solid var(--border); border-radius: 4px; }
 .license { border-left: 3px solid var(--accent); padding: 4px 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .controls select { flex: 1 1 10em; min-width: 0; }
 .controls button { flex: none; }
