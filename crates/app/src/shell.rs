@@ -90,7 +90,12 @@ pub fn init(
     .detach();
     // The app decides itself whether the last window closing quits it (see `main`).
     cx.on_window_closed(|cx, _| {
-        if cx.windows().is_empty() && !cx.global::<Shell>().resident {
+        if !cx.windows().is_empty() {
+            return;
+        }
+        if cx.global::<Shell>().resident {
+            crate::app_log!("window closed; staying resident");
+        } else {
             cx.quit();
         }
     })
@@ -197,11 +202,14 @@ pub fn open_window(settings: Settings, text: Option<String>, cx: &mut App) -> Re
         cx.new(|cx| TranslatorView::new(custom_model, settings, window, cx))
     })
     .map_err(|e| e.to_string())?;
-    if let Some(text) = text {
-        let _ = handle.update(cx, |_, window, cx| {
+    let _ = handle.update(cx, |_, window, cx| {
+        // Opened by an app in the background (a double copy, or the notification-area icon), the
+        // window would stay behind the active one on Windows.
+        window.activate_window();
+        if let Some(text) = text {
             view.update(cx, |view, cx| view.translate_text(text, window, cx));
-        });
-    }
+        }
+    });
     cx.global_mut::<Shell>().main = Some((handle, view.downgrade()));
     Ok(())
 }

@@ -578,6 +578,18 @@ mod tests {
     }
 
     #[test]
+    fn a_watcher_stops_when_dropped() {
+        // Where the clipboard cannot be watched (Linux without an X server), there is nothing
+        // to stop.
+        let Ok(watcher) = watch(|_| {}) else {
+            return;
+        };
+        let start = Instant::now();
+        drop(watcher);
+        assert!(start.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
     fn a_third_copy_starts_anew() {
         let start = Instant::now();
         let mut detector = DoubleCopy::default();
