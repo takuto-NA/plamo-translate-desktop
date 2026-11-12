@@ -25,6 +25,11 @@ rust-i18n = "4.2"
 serde.workspace = true
 serde_json.workspace = true
 
+[dev-dependencies]
+# A test platform and simulated input, for the tests of the window's shortcuts. GPUI itself, as
+# gpui-kit depends on it: gpui-kit's own `test-support` asks for another version of taffy.
+gpui = { package = "gpui-pre", version = "=0.3.11", features = ["test-support"] }
+
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
 

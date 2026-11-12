@@ -24,6 +24,7 @@ All notable changes to PLaMo Translate Desktop. Each release's section here also
 
 ### Fixed
 
+- Ctrl+Enter (⌘Enter on macOS) in the app translates without also putting a line break into the text ([#8](https://github.com/tanakh/plamo-translate-desktop/issues/8)). In the context and glossary fields it now translates too, instead of breaking the line.
 - **Translate this page** in the browser extension's panel did nothing where the extension's access to sites is set to "on click" in the browser: the browser neither ran nor refused the request. The panel now explains, and offers to allow the extension on all sites, as it does on other tabs it may not enter.
 - Page translation in the browser extension left alone the parts of a page marked not to be translated, code blocks, and text being edited, but translated content added to them later (as a page loads more). It now leaves that alone too.
 

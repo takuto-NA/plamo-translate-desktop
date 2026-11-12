@@ -385,6 +385,11 @@ The implementation is `engine::llama::Session` (one llama.cpp context of a loade
   - Editing the input cancels the running job and starts a new one.
   - Results are cached by (input, settings), so swapping languages back and forth costs nothing.
 - The source pane has focus at startup. `Ctrl+Shift+C` copies the translation, and `Ctrl+Enter` translates immediately.
+  - `Ctrl+Enter` (`Cmd+Enter` on macOS) is bound by the app in the text inputs' own key context (`Input`), after `gpui_kit::init`
+    so that it wins over gpui-kit's binding of the same key: that one's `Enter` action puts a line break into a multi-line input
+    before it tells of the key, with the modifier held too. It translates from any of the inputs (source, context, glossary).
+    `view::shortcut_tests` presses the key in a text area with the app's bindings (GPUI's test platform, a dev-dependency on
+    `gpui-pre` itself: gpui-kit's own `test-support` asks for another version of taffy than the lock file has).
 - Languages:
   - The default source is "Detect language".
   - The default target is "Japanese ⇄ English (auto)": text with kana goes to English, and everything else goes to Japanese.
