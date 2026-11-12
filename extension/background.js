@@ -16,7 +16,7 @@
 // - Translations are kept (cache.js) and used again: what a page or a panel asks for is looked
 //   up first, and only the rest goes to the engine.
 
-importScripts("i18n.js", "pdf-store.js", "cache.js");
+importScripts("i18n.js", "pdf-store.js", "cache.js", "auto-target.js");
 
 const HOST = "com.github.tanakh.plamo_translate";
 const IDLE_MS = 5 * 60 * 1000;
@@ -107,7 +107,8 @@ function setMadeWith(value) {
 }
 
 /**
- * The keys in the cache of `texts` translated into `target` in `style`, or null where no
+ * The keys in the cache of `texts` translated into `target` (a language: never `auto`, which
+ * would keep apart what a page and the panel translate alike) in `style`, or null where no
  * translations are kept: with the setting off, or what the engine translates with not known.
  */
 async function cacheKeys(texts, target, style) {
@@ -116,10 +117,10 @@ async function cacheKeys(texts, target, style) {
   return Promise.all(texts.map((text) => translationCache.keyOf({ ...madeWith, target, style, text })));
 }
 
-/** Keeps the translation `text` of `source`; `resolved` is the language `target` came to (for `auto`). */
-async function keepTranslation(source, text, target, style, resolved) {
+/** Keeps the translation `text` of `source` into `target`. */
+async function keepTranslation(source, text, target, style) {
   const keys = await cacheKeys([source], target, style);
-  if (keys) await translationCache.put([{ key: keys[0], text, target: resolved, size: source.length + text.length }]);
+  if (keys) await translationCache.put([{ key: keys[0], text, size: source.length + text.length }]);
 }
 
 /** Tells the panels (or `port`) how many translations are kept. */
@@ -330,9 +331,6 @@ function onHostMessage(connection, message) {
 /** Follows a panel's translation, to keep it once it is whole. */
 function onPanelJobMessage(job, message) {
   switch (message.type) {
-    case "started":
-      job.target = message.target;
-      break;
     case "text":
       job.text += message.text;
       break;
@@ -343,7 +341,7 @@ function onPanelJobMessage(job, message) {
       // Not one stopped or cut short: asking again may give all of it.
       if (!message.stopped && !message.cut && job.text) {
         const { text, target, style } = job.request;
-        keepTranslation(text, job.text, target, style, job.target).catch(() => {});
+        keepTranslation(text, job.text, target, style).catch(() => {});
       }
       break;
   }
@@ -358,7 +356,7 @@ function onBatchMessage(job, message) {
     if (item) {
       item.done = true;
       post(page?.port, { type: "segment", sid: item.sid, text: message.text });
-      if (page && !page.incognito) keepTranslation(item.text, message.text, page.target, page.style, page.target).catch(() => {});
+      if (page && !page.incognito) keepTranslation(item.text, message.text, page.target, page.style).catch(() => {});
     }
     // The in-browser engine tells each segment's tokens; the app's host only the batch's.
     if (message.tokens > 0 && !job.cancelled) {
@@ -561,7 +559,7 @@ function reportWorking(tabId, page) {
 /** Panels whose translation is being looked up among those kept, with its id. */
 const lookingUp = new Map();
 
-/** The translation kept for a panel's request: { text, target }, or null. */
+/** The translation kept for a panel's request: { text }, or null. */
 async function panelKept({ text, target, style }) {
   try {
     const keys = await cacheKeys([text], target, style);
@@ -581,7 +579,9 @@ function onPanelMessage(port, message) {
       if (host) sendHost({ type: "options" });
       break;
     case "translate": {
-      const { text, target, style } = message;
+      const { text, style } = message;
+      // Settled here, so that the text is kept under its language, as a page's paragraphs are.
+      const target = resolveTarget(message.target, text);
       const job = { id: nextId++, kind: "panel", port, text: "", request: { text, target, style } };
       post(port, { type: "accepted", id: job.id });
       // A translation kept is the answer; else it goes to the host, unless the panel asked for
@@ -591,7 +591,7 @@ function onPanelMessage(port, message) {
         if (lookingUp.get(port) !== job.id) return;
         lookingUp.delete(port);
         if (kept) {
-          post(port, { type: "started", id: job.id, target: kept.target ?? target });
+          post(port, { type: "started", id: job.id, target });
           post(port, { type: "text", id: job.id, text: kept.text });
           post(port, { type: "done", id: job.id, tokens: 0, cut: 0, stopped: false, cancelled: false, kept: true });
           return;

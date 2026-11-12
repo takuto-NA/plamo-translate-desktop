@@ -394,7 +394,7 @@ The implementation is `engine::llama::Session` (one llama.cpp context of a loade
   - The default source is "Detect language".
   - The default target is "Japanese ⇄ English (auto)": Japanese text goes to English, and everything else goes to Japanese.
     Text is Japanese when it has kana (kanji alone could be Chinese), and kana and kanji make up a tenth of its letters or more
-    (`appdata::looks_japanese`; `resolveTarget` in the extension goes by the same rule): one kana used to be enough, which sent
+    (`appdata::looks_japanese`; `resolveTarget` in the extension's `auto-target.js` goes by the same rule): one kana used to be enough, which sent
     an English text quoting a Japanese word, such as this project's README, into English.
   - Swapping exchanges explicit languages and moves the translation into the source pane.
 - The title bar is drawn by the app (gpui-kit `TitleBar`) on every platform.
@@ -673,7 +673,11 @@ or, from v0.4.0, on its own with an in-browser engine (see "In-browser engine" b
     The context menu and the shortcuts do, so the panel reaches a tab only after one of those was used on it,
     until the tab goes to another site. When the injection fails for want of a host permission, the panel offers the all-sites permission unless it is granted already;
     other failures (browser pages, the extension stores, error pages) say that the page cannot be translated. The notice sits under the page button.
-  - Injecting into a page that has `page.js` already starts it again; it sends only runs not sent yet, and shows its box again even when there are none.
+  - Injecting into a page that has `page.js` already asks it again (`again`). On a page translated as far as it shows (nothing
+    waiting, not stopped, and no run that shows left to send), that restores the original, as the box's button does, and
+    the next request translates it again, at once from the translations kept: the menu, the button and the shortcut go back
+    and forth (asked for in #9; a second shortcut would have been one more key to learn). Otherwise it starts again: it sends
+    only runs not sent yet, and shows its box again. The PDF viewer calls `start` itself and has its own **Original**.
   - Closing the box ends the page translation, like Stop, and also stops watching for runs that show or are added later: otherwise the next
     translated paragraph would bring the box back. What is translated stays; translating the page again starts it again.
   - The page is cut into runs: consecutive text and inline elements within one block. Code, line breaks, and text marked `translate="no"`
@@ -750,7 +754,10 @@ or, from v0.4.0, on its own with an in-browser engine (see "In-browser engine" b
   keeps each translation in IndexedDB and answers from there before it asks the engine.
   - A translation is kept under the SHA-256 hash of the engine (`app` or `browser`), its model (the label in its status), the
     target language, the style, and the text (for a page, the run's indexed HTML). Only the hash, the translation, its size, and
-    when it was last used are stored. The model comes from the engine's last status that told one, saved (`madeWith`) so that a
+    when it was last used are stored. The target is the language translated into, never `auto`: the background settles it for
+    a panel's request (`resolveTarget`) before the lookup and sends the engine that language, as a page settles its own.
+    So a paragraph a page translated is found for the same text in the panel (one without links or emphasis: those are kept
+    as indexed HTML). The panel's text is looked up whole, not by paragraph. The model comes from the engine's last status that told one, saved (`madeWith`) so that a
     lookup does not start the engine; it is forgotten when the panel changes the engine or its model, until the next status.
     (A model changed in the app while the host does not run is noticed only when the host next starts.)
   - Pages: the paragraphs of a `segments` message are looked up together (`admit`); those kept are answered at once as `segment`

@@ -12,7 +12,7 @@ pub mod settings;
 /// example) is not Japanese. A Japanese sentence full of Latin names still is: `npm install
 /// --save-dev typescript を実行` is at the limit.
 /// "Japanese ⇄ English" translates such text into English and everything else into Japanese.
-/// `resolveTarget` in the extension's `translator.js` goes by the same rule.
+/// `resolveTarget` in the extension's `auto-target.js` goes by the same rule.
 pub fn looks_japanese(text: &str) -> bool {
     let (mut kana, mut kanji, mut other) = (0usize, 0usize, 0usize);
     for c in text.chars() {

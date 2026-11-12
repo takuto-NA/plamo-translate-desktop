@@ -116,6 +116,8 @@ Install the app first (see [Download](#download)), then:
    Paragraphs are translated in place, keeping links and formatting: those in view first, and when you scroll, the ones you scrolled to.
    Hidden ones (collapsed sections, menus) wait until they show. **Settings** in the panel can limit it to the paragraphs near the view,
    translating the rest as you scroll to them.
+   Asking again on a translated page (the menu, the button, or the shortcut) shows the original, and once more the translation,
+   at once from the translations kept (see below): one key goes back and forth. While the page is still being translated, or was stopped, it goes on instead.
    A box at the bottom right shows the progress and can stop, resume, or restore the page; closing it ends the page's translation
    (what is translated stays). A frame marks the paragraphs being translated (**Settings** in the panel can turn it off).
    Translating another page stops this one, which can be resumed later.

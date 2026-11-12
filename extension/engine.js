@@ -16,7 +16,7 @@
 //   worker running (see the end of this file).
 
 import { Wllama } from "./vendor/wllama/wllama.js";
-import { History, STOP, estimateTokens, prompt, resolveTarget, split } from "./translator.js";
+import { History, STOP, estimateTokens, prompt, split } from "./translator.js";
 
 /** What the commit of the built-in files changed (see BUILTIN). */
 const TARGET_LANG_AUTO = "Update the chat template: switch between Japanese and English by default (target_lang=auto)";

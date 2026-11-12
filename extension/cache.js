@@ -25,7 +25,7 @@ var translationCache = (() => {
 
   /**
    * The key of a translation: the hash of the engine (`app` or `browser`), its model, the
-   * target language (as asked for: `auto` too), the style, and the text.
+   * target language (the one translated into, not `auto`), the style, and the text.
    */
   async function keyOf({ engine, model, target, style, text }) {
     const bytes = new TextEncoder().encode(JSON.stringify([engine, model, target, style || "", text]));
@@ -73,10 +73,7 @@ var translationCache = (() => {
     });
   }
 
-  /**
-   * The translations kept for `keys`: a Map from key to { text, target } (`target` is the
-   * language a translation into `auto` went into). Counts as using them.
-   */
+  /** The translations kept for `keys`: a Map from key to { text }. Counts as using them. */
   function get(keys) {
     const found = new Map();
     const now = Date.now();
@@ -86,7 +83,7 @@ var translationCache = (() => {
         request.onsuccess = () => {
           const entry = request.result;
           if (!entry) return;
-          found.set(key, { text: entry.text, target: entry.target });
+          found.set(key, { text: entry.text });
           if (now - entry.used > TOUCH_MS) store.put({ ...entry, used: now });
         };
       }
@@ -96,15 +93,15 @@ var translationCache = (() => {
 
   let added = 0;
   /**
-   * Keeps translations: `entries` are { key, text, target, size }, where `size` is the length
-   * of the text translated and of its translation together.
+   * Keeps translations: `entries` are { key, text, size }, where `size` is the length of the
+   * text translated and of its translation together.
    */
   async function put(entries) {
     entries = entries.filter((entry) => entry.size <= MAX_ENTRY_CHARS);
     if (!entries.length) return;
     const used = Date.now();
     await transact("readwrite", (store) => {
-      for (const { key, text, target, size } of entries) store.put({ key, text, target, size, used });
+      for (const { key, text, size } of entries) store.put({ key, text, size, used });
     });
     added += entries.length;
     if (added >= PRUNE_EVERY) await prune();

@@ -9,7 +9,8 @@
 
 (() => {
   if (window.__plamoPage) {
-    window.__plamoPage.start();
+    // Asked for again on a page that has it already.
+    window.__plamoPage.again();
     return;
   }
 
@@ -688,9 +689,26 @@
     recheckTimer = setInterval(recheck, 2000);
   }
 
+  /**
+   * The page translation was asked for again (the menu, the shortcut, the panel's button). On a
+   * page translated as far as it shows, that restores the original, and asking once more
+   * translates it again, at once from the translations kept: one key goes back and forth.
+   * Otherwise (stopped, still translating, or with paragraphs that showed since) it goes on.
+   */
+  function again() {
+    const more = () => collect(document.body).some((run) => !run.some((node) => handled.has(node)) && wanted(run));
+    if (applied.length && !pending.size && !stopped && !more()) {
+      // The box says so, also when it was closed.
+      closed = false;
+      undo();
+    } else {
+      start();
+    }
+  }
+
   /** For the PDF viewer: the paragraphs still to translate, and whether the translation was stopped. */
   const state = () => ({ waiting: pending.size + deferred.size, stopped });
 
-  window.__plamoPage = { start, state };
+  window.__plamoPage = { start, again, state };
   start();
 })();

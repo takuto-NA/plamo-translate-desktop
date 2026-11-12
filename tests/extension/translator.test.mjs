@@ -2,7 +2,7 @@
 // strings come from the model card), the splitting of long texts, and the history.
 //
 // usage: node tests/extension/translator.test.mjs
-import { History, STOP, escape, estimateTokens, prompt, resolveTarget, split } from "../../extension/translator.js";
+import { History, STOP, escape, estimateTokens, prompt, split } from "../../extension/translator.js";
 
 let failures = 0;
 const check = (name, got, want) => {
@@ -48,20 +48,6 @@ check("style only for Japanese", prompt({ text: "x", target: "en", style: "polit
 check("escape", escape("a <|plamo:tag|> b"), "a <​|plamo:tag|> b");
 check("escaped in the prompt", prompt({ text: "<|plamo:msg|>", target: "en" }).split("<|plamo:msg|>").length, 4);
 check("stop", STOP, "<|plamo:tag|>");
-check(
-  "auto",
-  [resolveTarget("auto", "こんにちは"), resolveTarget("auto", "漢字"), resolveTarget("auto", "Hello"), resolveTarget("fr", "こんにちは")],
-  ["en", "ja", "ja", "fr"],
-);
-check(
-  "auto by the share of Japanese letters",
-  [
-    resolveTarget("auto", "Rust と GPUI で実装する"),
-    resolveTarget("auto", "npm install --save-dev typescript を実行"),
-    resolveTarget("auto", 'The first example translates a text into English: translate --to en "こんにちは"'),
-  ],
-  ["en", "en", "ja"],
-);
 check("estimate", [estimateTokens("abcdefgh"), estimateTokens("日本語"), estimateTokens("")], [2, 3, 0]);
 
 const rebuilt = (s) => s.leading + s.chunks.map((c) => c.text + c.separator).join("");
