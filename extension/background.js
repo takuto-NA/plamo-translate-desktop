@@ -14,7 +14,7 @@
 //   while the host's connection is open; the in-browser engine sends `keepalive` messages.
 // - The context menus and page.js show texts in the display language chosen in the panel.
 
-importScripts("i18n.js");
+importScripts("i18n.js", "pdf-store.js");
 
 const HOST = "com.github.tanakh.plamo_translate";
 const IDLE_MS = 5 * 60 * 1000;
@@ -24,7 +24,8 @@ const MENU_SELECTION = "translate-selection";
 const MENU_PAGE = "translate-page";
 const MENUS = [
   { id: MENU_SELECTION, message: "menuTranslate", contexts: ["selection"] },
-  { id: MENU_PAGE, message: "menuTranslatePage", contexts: ["page"] },
+  // Also in frames inside the page: the whole page is translated from there too.
+  { id: MENU_PAGE, message: "menuTranslatePage", contexts: ["page", "frame"] },
 ];
 
 /**
@@ -569,48 +570,111 @@ async function translatePage(tabId) {
     await chrome.runtime.sendMessage({ type: "pdf_translate", tabId }).catch(() => {});
     return;
   }
+  // A tab whose address does not show is one the extension has no access to. The browser
+  // refuses a script for it, saying why (a browser page, a site not allowed), unless the user
+  // withholds access the extension was given ("on click"): the script is then held back, neither
+  // run nor refused, and the panel would wait for nothing. So a script that does nothing goes
+  // first, and one still held after a moment is refused here, in the words of the browser's
+  // refusal for a site not allowed, which the panel knows.
+  const tab = await chrome.tabs.get(tabId);
+  if (tab.url === undefined) {
+    const held = new Error("Cannot access contents of the page. The extension must request permission to access its site.");
+    const refused = await Promise.race([
+      chrome.scripting.executeScript({ target: { tabId }, func: () => true }).then(
+        () => null,
+        (e) => e,
+      ),
+      new Promise((resolve) => setTimeout(() => resolve(held), 1000)),
+    ]);
+    if (refused) throw refused;
+  }
   // A PDF shows in the browser's own viewer, which no extension can enter: its file is read in
   // the tab (as the page would read it, with its cookies) and shown in the extension's viewer.
-  const [{ result: pdf } = {}] = await chrome.scripting.executeScript({ target: { tabId }, func: readPdf });
+  const key = crypto.randomUUID();
+  const [{ result: pdf } = {}] = await chrome.scripting.executeScript({ target: { tabId }, func: readPdf, args: [key, PDF_CHUNK] });
   if (pdf) {
-    await openPdfViewer(tabId, pdf);
+    await openPdfViewer(tabId, key, pdf);
     return;
   }
   // page.js asks for the display language's messages ("ui_messages") when it starts.
   await chrome.scripting.executeScript({ target: { tabId }, files: ["i18n.js", "page.js"] });
 }
 
-/** PDF files read for the viewer, by key, until it takes them (or a minute passes). */
-const pdfFiles = new Map();
+/**
+ * Translates the page the menu was opened on. A click inside the browser's PDF viewer may come
+ * without its tab (an id of -1, where the viewer is a guest in the tab), and then gives no
+ * access to the tab either. The tab is then the active one; and unless the extension has access
+ * to the PDF's site, its viewer opens with the PDF's address from the click and reads it itself,
+ * asking for the access it needs.
+ */
+async function translateFromMenu(info, tab) {
+  if (tab?.id >= 0) return translatePage(tab.id);
+  const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (active?.id == null) return;
+  const url = [info.frameUrl, info.pageUrl].find((u) => /^(?:https?|file):/.test(u ?? ""));
+  // Asked first, not found out by trying: where the user withholds the extension's access
+  // ("on click"), the browser holds a script for the tab back instead of refusing it, and
+  // nothing would happen.
+  if (!url || (await siteAccess(url))) {
+    try {
+      return await translatePage(active.id);
+    } catch (e) {
+      if (!url) throw e;
+    }
+  }
+  await openPdfViewer(active.id, crypto.randomUUID(), { url, error: "no access to the tab" });
+}
 
-/** Runs in the tab: its PDF as a data URL, or null if the tab shows no PDF. */
-async function readPdf() {
+/** Whether the extension may read the site of `url` (http or https) now. */
+async function siteAccess(url) {
+  const { protocol, hostname } = new URL(url);
+  if (!/^https?:$/.test(protocol)) return false;
+  return chrome.permissions.contains({ origins: [`${protocol}//${hostname}/*`] }).catch(() => false);
+}
+
+/** A PDF comes from its tab in pieces of this many bytes: a message has a size limit. */
+const PDF_CHUNK = 4 * 1024 * 1024;
+
+/**
+ * Runs in the tab: sends its PDF to the background in pieces (`pdf_chunk` messages, each
+ * answered before the next), for the viewer's store under `key`. Returns { url, size, chunks },
+ * { url, error } if the file could not be read, or null if the tab shows no PDF.
+ */
+async function readPdf(key, chunkSize) {
   if (document.contentType !== "application/pdf") return null;
   const url = location.href;
   try {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const blob = await response.blob();
-    const data = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(blob);
-    });
-    return { url, data };
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let chunks = 0;
+    for (let at = 0; at < bytes.length; at += chunkSize) {
+      const piece = bytes.subarray(at, at + chunkSize);
+      let binary = "";
+      for (let i = 0; i < piece.length; i += 0x8000) binary += String.fromCharCode.apply(null, piece.subarray(i, i + 0x8000));
+      const stored = await chrome.runtime.sendMessage({ type: "pdf_chunk", key, index: chunks++, url, data: btoa(binary) });
+      if (!stored) throw new Error("not stored");
+    }
+    return { url, size: bytes.length, chunks };
   } catch (e) {
     // The viewer then reads it from its address (a file needs the access to file URLs).
     return { url, error: String(e?.message ?? e) };
   }
 }
 
+/** Keeps a piece of a PDF that `readPdf` sent from its tab. */
+async function storePdfChunk(message) {
+  if (message.index === 0) await pdfStore.begin(message.key, message.url);
+  const binary = atob(message.data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  await pdfStore.putChunk(message.key, message.index, bytes.buffer);
+}
+
 /** Opens the viewer next to the tab, which translates the PDF as it shows it. */
-async function openPdfViewer(tabId, pdf) {
-  const key = crypto.randomUUID();
-  if (pdf.data) {
-    pdfFiles.set(key, pdf.data);
-    setTimeout(() => pdfFiles.delete(key), 60000);
-  }
+async function openPdfViewer(tabId, key, pdf) {
+  // Without the file here, the viewer reads it from its address, and keeps it then.
+  if (!pdf.error) await pdfStore.finish(key, pdf.size, pdf.chunks).catch(() => {});
   const tab = await chrome.tabs.get(tabId);
   const url = chrome.runtime.getURL(`pdf.html?${new URLSearchParams({ src: pdf.url, key })}`);
   await chrome.tabs.create({ url, windowId: tab.windowId, index: tab.index + 1, openerTabId: tabId });
@@ -731,17 +795,27 @@ chrome.storage.local.onChanged.addListener((changes) => {
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  languageReady.then(() => {
+  languageReady.then(async () => {
+    // Those of the version before stay over an update, and would keep their contexts.
+    await chrome.contextMenus.removeAll();
     for (const { id, message, contexts } of MENUS) chrome.contextMenus.create({ id, title: t(message), contexts });
   });
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === "pdf_data") {
-    // Once: the viewer reads the file again from its address when reloaded.
-    sendResponse({ data: pdfFiles.get(message.key) ?? null });
-    pdfFiles.delete(message.key);
-    return false;
+// The viewer's PDFs not opened for long go, also when no other PDF is opened to make room for.
+chrome.runtime.onStartup.addListener(() => {
+  pdfStore.prune().catch(() => {});
+});
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "pdf_chunk") {
+    // From readPdf in a tab, which waits for the answer before it sends the next piece.
+    if (!sender?.tab || typeof message.data !== "string") return false;
+    storePdfChunk(message).then(
+      () => sendResponse(true),
+      () => sendResponse(false),
+    );
+    return true;
   }
   if (message?.type !== "ui_messages") return false;
   languageReady.then(() => sendResponse(uiMessages ?? null));
@@ -751,8 +825,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === MENU_PAGE && tab?.id != null) {
-    translatePage(tab.id).catch(() => {});
+  if (info.menuItemId === MENU_PAGE) {
+    translateFromMenu(info, tab).catch((e) => console.warn("translate page:", e));
     return;
   }
   if (info.menuItemId !== MENU_SELECTION || !info.selectionText) return;

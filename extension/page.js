@@ -210,7 +210,11 @@
     const fragment = rebuild(text, elements);
     // Text left as it was (names, code, text already in the target language) is not repeated
     // below the original, nor replaced by itself.
-    if (fragment.textContent.replace(/\s+/g, " ").trim() === runText(run)) return;
+    if (fragment.textContent.replace(/\s+/g, " ").trim() === runText(run)) {
+      // For the PDF viewer, which keeps what was translated: this paragraph stays as it is.
+      anchor(run)?.dispatchEvent(new CustomEvent("plamo-same", { bubbles: true, detail: { lang: target } }));
+      return;
+    }
     if (mode === "below") {
       const box = document.createElement("span");
       box.setAttribute("data-plamo", "");
@@ -644,10 +648,11 @@
     style = settings.style;
     target = settings.target;
     if (target === "auto") {
-      // Japanese pages go into English, everything else into Japanese.
+      // Japanese pages go into English, everything else into Japanese. The PDF viewer tells
+      // which from the PDF's own text: its page also shows translations kept from before.
       const sample = (document.body.innerText || "").slice(0, 20000);
       const kana = (sample.match(/[\u3040-\u30ff]/g) || []).length;
-      target = kana > sample.length * 0.05 ? "en" : "ja";
+      target = document.documentElement.dataset.plamoPageAuto || (kana > sample.length * 0.05 ? "en" : "ja");
     }
     if (target !== "ja") style = "";
     deferred.clear();
@@ -686,6 +691,9 @@
     recheckTimer = setInterval(recheck, 2000);
   }
 
-  window.__plamoPage = { start };
+  /** For the PDF viewer: the paragraphs still to translate, and whether the translation was stopped. */
+  const state = () => ({ waiting: pending.size + deferred.size, stopped });
+
+  window.__plamoPage = { start, state };
   start();
 })();

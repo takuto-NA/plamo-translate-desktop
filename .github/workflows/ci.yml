@@ -75,4 +75,4 @@ jobs:
           node-version: 22
       # The syntax of every script (Node recognizes the ES modules), then the tests.
       - run: for f in extension/*.js; do node --check "$f"; done
-      - run: node tests/extension/translator.test.mjs
+      - run: for f in tests/extension/*.test.mjs; do node "$f"; done

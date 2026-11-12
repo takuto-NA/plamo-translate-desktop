@@ -4,15 +4,18 @@
 // translates those boxes like the paragraphs of any page, and a translated box covers its
 // paragraph, while figures, formulas, tables, and everything else stay as drawn.
 //
-// Paragraphs are found from the positions of the text: pieces on one baseline make a line, and
-// lines of one size, close together and aligned, make a paragraph. Formulas are told by their
-// fonts (TeX's math fonts and the like) and symbols: a line that is mostly formula is left as
-// drawn, and a formula inside a paragraph goes into the translation as an image of it.
+// The paragraphs are found from the positions of the text (pdf-layout.js).
 //
-// The file comes from the tab the PDF was open in (background.js reads it there, as the page
-// would, and hands it over by `key`), or else from its address (`src`).
+// The file is kept in the browser under `key` (pdf-store.js): the background puts it there from
+// the tab the PDF was open in, or else it is read here from its address (`src`) and kept then.
+// The translations are kept with it, so a viewer reloaded shows them again and goes on with
+// the rest.
+//
+// "Save as PDF" prints the pages as shown, each on a page of its own size, for the browser to
+// save as a PDF.
 
 import * as pdfjs from "./vendor/pdfjs/pdf.min.mjs";
+import { alignment, blocksOf, fontKind, isMath, lineHeight, linesOf, normalize, partsOf, worthTranslating } from "./pdf-layout.js";
 
 pdfjs.GlobalWorkerOptions.workerSrc = "vendor/pdfjs/pdf.worker.min.mjs";
 
@@ -21,28 +24,23 @@ const params = new URLSearchParams(location.search);
 const source = params.get("src") ?? "";
 const key = params.get("key");
 
+/** The browser's page of extensions, where this one's details are. */
+const EXTENSIONS_PAGE = navigator.userAgentData?.brands?.some((b) => b.brand === "Microsoft Edge") ? "edge://extensions/" : "chrome://extensions/";
 /** The widest page is shown at most this wide (CSS pixels), and otherwise as wide as the window. */
 const MAX_WIDTH = 1000;
 /** A transparent pixel, for formula images not drawn yet (an image without a source has no size). */
 const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-
-// Fonts of formulas: TeX's (Computer Modern, AMS, Latin Modern, STIX…), Word's (Cambria Math), Symbol.
-const MATH_FONT =
-  /CMMI|CMSY|CMEX|CMBSY|MSAM|MSBM|EUFM|EUSM|EUEX|RSFS|STMARY|WASY|ESINT|BBM|DSROM|MTSY|MTMI|MTEX|TXSY|TXMI|TXEX|PXSY|PXMI|PXEX|Math|(^|\+)Symbol/i;
-// Symbols of formulas: Greek, primes, arrows, operators, mathematical letters.
-const MATH_CHAR = /[Ͱ-Ͽ′-‷⁡-⁤←-⇿∀-⋿⌈-⌋⟀-⟯⦀-⫿\u{1d400}-\u{1d7ff}]/u;
-// Names of functions set upright in formulas.
-const MATH_WORD = /^(?:log|ln|exp|sin|cos|tan|tanh|max|min|arg|argmax|argmin|lim|sup|inf|det|dim|Pr|softmax|sign|diag|tr|mod)$/;
-const LETTER = /\p{L}/u;
-const CJK = /[　-ヿ㐀-鿿豈-﫿＀-￯]/;
-const BOLD = /Bold|Black|Heavy|Semibold|Demi|CMBX|Medi/i;
-const ITALIC = /Italic|Oblique|CMTI|CMSL/i;
-// Marks that start a list item or a footnote: a paragraph of its own.
-const BULLET = /^[•●▪◦‣∙·*∗†‡§¶]/;
+/** CSS pixels per PDF point in print, where a CSS point is a PDF point. */
+const PRINT_SCALE = 96 / 72;
+/** Pages are drawn for print at this many pixels per point (200 per inch), */
+const PRINT_PIXELS = 200 / 72;
+/** but with no more pixels than this (large formats). */
+const PRINT_MAX_PIXELS = 16e6;
 
 /**
  * The pages, in order: { number, page (PDF.js), viewport (scale 1), section, canvas, drawn (the
- * scale drawn at), drawing, blocks: [{ el, box }], maths: [{ id, box }], analyzed, colored }.
+ * scale drawn at), drawing, blocks: [{ el, box }], maths: [{ id, box }], mathUrls, analyzed,
+ * colored, cut }.
  */
 const pages = [];
 /** CSS pixels per PDF point. */
@@ -51,18 +49,55 @@ let nextMath = 1;
 /** The font size of most text, in points: smaller pieces are labels (in figures, say). */
 let bodySize = 0;
 const sizes = new Map();
+/** Pages are still being read for their paragraphs. */
+let analyzing = true;
+/** The pages are set up for print (see `savePdf`). */
+let printing = false;
+/** Translations kept from before, by "page:index" (see pdf-store.js). */
+let kept = new Map();
+/** The panel's settings the translations are made with. */
+let settings = { target: "auto", style: "" };
+/** The language the "auto" target means for this PDF, which page.js is told (see `autoTarget`). */
+let auto = "ja";
+/** Each paragraph's place: { page, index, maths (the ids of its formulas, in order) }. */
+const places = new WeakMap();
 
 // ---- Loading ----
 
 async function loadData() {
   if (key) {
-    const response = await chrome.runtime.sendMessage({ type: "pdf_data", key }).catch(() => null);
-    if (response?.data) return new Uint8Array(await (await fetch(response.data)).arrayBuffer());
+    const file = await pdfStore.get(key).catch(() => null);
+    if (file) return file.bytes;
   }
-  // Read here: possible with the extension's access to the site (or, for a file, to file URLs).
-  const response = await fetch(source);
+  // Read here: possible with the extension's access to the site (or, for a file, to file URLs),
+  // and then as the site's own pages would, signed in.
+  const response = await fetch(source, /^https?:/.test(source) && (await siteAccess()) ? { credentials: "include" } : {});
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return new Uint8Array(await response.arrayBuffer());
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  // Before PDF.js takes the bytes away.
+  if (key) await pdfStore.put(key, source, bytes).catch(() => {});
+  return bytes;
+}
+
+/**
+ * The pattern of where the PDF is, for the permission to read it: its site, or the files of
+ * this computer (which the extension reads only with that permission and, set in its details,
+ * the access to file URLs).
+ */
+function sitePattern() {
+  try {
+    const url = new URL(source);
+    if (url.protocol === "file:") return "file:///*";
+    return /^https?:$/.test(url.protocol) ? `${url.protocol}//${url.hostname}/*` : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether the extension may read where the PDF is. */
+async function siteAccess() {
+  const pattern = sitePattern();
+  return !!pattern && (await chrome.permissions.contains({ origins: [pattern] }).catch(() => false));
 }
 
 function fileName() {
@@ -91,8 +126,17 @@ async function main() {
     chrome.tabs.create({ url: source });
   });
   $("original").addEventListener("change", () => document.body.classList.toggle("original", $("original").checked));
+  $("save").title = t("pdfSaveHint");
+  $("save").addEventListener("click", savePdf);
+  $("again").title = t("pdfAgainHint");
+  $("again").addEventListener("click", async () => {
+    if (key) await pdfStore.clearTranslations(key).catch(() => {});
+    location.reload();
+  });
   showMessage(t("pdfLoading"));
 
+  settings = await chrome.storage.local.get(settings);
+  if (key) kept = await pdfStore.translations(key).catch(() => new Map());
   let doc;
   try {
     const data = await loadData();
@@ -108,13 +152,38 @@ async function main() {
     }).promise;
   } catch (e) {
     const message = String(e?.message ?? e);
-    showMessage(source.startsWith("file:") ? `${t("pdfLoadFailed", message)} ${t("pdfFileAccess")}` : t("pdfLoadFailed", message));
+    showMessage(t("pdfLoadFailed", message));
+    // What was kept is not a PDF that can be shown (a sign-in page in its place, say): the next
+    // try reads it again.
+    if (key) pdfStore.remove(key).catch(() => {});
+    const file = source.startsWith("file:");
+    const pattern = sitePattern();
+    if (file && !(await chrome.extension.isAllowedFileSchemeAccess().catch(() => false))) {
+      // The access to file URLs is set in the extension's details, a page of the browser which
+      // only `tabs.create` opens (a page cannot link there).
+      showMessage(t("pdfFileAccess"));
+      $("allow").textContent = t("pdfOpenDetails");
+      $("allow").hidden = false;
+      $("allow").addEventListener("click", () => chrome.tabs.create({ url: `${EXTENSIONS_PAGE}?id=${chrome.runtime.id}` }));
+    } else if (pattern && !(await siteAccess())) {
+      // Without the permission for the PDF's site or for files (the viewer opened from the
+      // browser's PDF viewer, which gives none): the user can give it here.
+      const host = file ? "" : new URL(source).hostname;
+      showMessage(file ? t("pdfNeedsFiles") : t("pdfNeedsAccess", host));
+      $("allow").textContent = file ? t("pdfAllowFiles") : t("pdfAllow", host);
+      $("allow").hidden = false;
+      $("allow").addEventListener("click", async () => {
+        if (await chrome.permissions.request({ origins: [pattern] }).catch(() => false)) location.reload();
+      });
+    }
     return;
   }
   $("message").hidden = true;
   const title = (await doc.getMetadata().catch(() => null))?.info?.Title;
   if (title?.trim()) document.title = `${title.trim()} — PLaMo Translate`;
   $("info").textContent = t("pdfPages", String(doc.numPages));
+  $("save").disabled = false;
+  $("again").disabled = false;
 
   for (let number = 1; number <= doc.numPages; number++) {
     const page = await doc.getPage(number);
@@ -124,21 +193,51 @@ async function main() {
     section.style.setProperty("--w", viewport.width);
     section.style.setProperty("--h", viewport.height);
     $("pages").append(section);
-    pages.push({ number, page, viewport, section, canvas: null, drawn: 0, drawing: false, blocks: [], maths: [] });
+    pages.push({ number, page, viewport, section, canvas: null, drawn: 0, drawing: false, blocks: [], maths: [], mathUrls: [] });
   }
+  pageSizes();
   fitScale();
+  auto = await autoTarget();
+  document.documentElement.dataset.plamoPageAuto = auto;
   for (const entry of pages) visibility.observe(entry.section);
 
   // Page by page, in order: page.js takes each page's paragraphs as they are added. It starts
   // with the first pages, so that the translation does not wait for a long PDF.
+  let texts = 0;
+  let started = false;
   for (const entry of pages) {
     try {
-      await analyze(entry);
+      texts += await analyze(entry);
     } catch (e) {
       console.warn(`page ${entry.number}:`, e);
     }
-    if (entry.number === Math.min(2, pages.length)) startTranslation();
+    if (!started && texts && (entry.number >= 2 || entry.number === pages.length)) {
+      started = true;
+      startTranslation();
+    }
   }
+  analyzing = false;
+  if (!texts) {
+    // Pictures of pages (a scan): there is no text to find, and none to translate.
+    $("notice").textContent = t("pdfNoText");
+    $("notice").hidden = false;
+  }
+}
+
+/**
+ * What the automatic target means here, as page.js decides for a page: a Japanese PDF goes into
+ * English, any other into Japanese. From the PDF's text, not the page's, which shows
+ * translations kept from before when the viewer is loaded again.
+ */
+async function autoTarget() {
+  let sample = "";
+  for (const entry of pages.slice(0, 5)) {
+    const content = await entry.page.getTextContent().catch(() => null);
+    sample += (content?.items ?? []).map((item) => item.str ?? "").join("");
+    if (sample.length >= 20000) break;
+  }
+  const kana = (sample.match(/[\u3040-\u30ff]/g) || []).length;
+  return kana > sample.length * 0.05 ? "en" : "ja";
 }
 
 // ---- Drawing ----
@@ -200,6 +299,7 @@ let resizeTimer = null;
 window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
+    if (printing) return;
     fitScale();
     for (const entry of pages) if (entry.canvas) draw(entry);
     for (const entry of pages) for (const { el } of entry.blocks) fit(el);
@@ -211,11 +311,17 @@ window.addEventListener("resize", () => {
  * color under it and the text's), which its translation then takes.
  */
 function paint(entry) {
-  if (!entry.analyzed || entry.colored || !entry.canvas) return;
-  entry.colored = true;
-  const { canvas } = entry;
+  if (!entry.analyzed || !entry.canvas) return;
+  if (!entry.cut) cutMaths(entry, entry.canvas);
+  if (!entry.colored) color(entry, entry.canvas);
+}
+
+/** Cuts the images of the page's formulas out of `canvas`, the page as drawn. */
+function cutMaths(entry, canvas) {
+  entry.cut = true;
   const k = canvas.width / entry.viewport.width;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const old = entry.mathUrls;
+  entry.mathUrls = [];
   for (const { id, box } of entry.maths) {
     const [x, y, w, h] = pixels(box, k, canvas);
     if (w < 1 || h < 1) continue;
@@ -226,10 +332,19 @@ function paint(entry) {
     piece.toBlob((blob) => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
+      entry.mathUrls.push(url);
       // Also in the copies page.js put into translations.
       for (const img of document.querySelectorAll(`img[data-math="${id}"]`)) img.src = url;
     });
   }
+  // Those of an earlier cut, once the images have had time to take the new ones.
+  if (old.length) setTimeout(() => old.forEach((url) => URL.revokeObjectURL(url)), 5000);
+}
+
+function color(entry, canvas) {
+  entry.colored = true;
+  const k = canvas.width / entry.viewport.width;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   for (const { el, box } of entry.blocks) {
     const [x, y, w, h] = pixels(box, k, canvas);
     if (w < 1 || h < 1) continue;
@@ -287,15 +402,20 @@ function colorsOf(data) {
 
 // ---- Finding the paragraphs ----
 
-/** The page's pieces of text, in points from its top left, with their fonts. */
+/**
+ * The page's pieces of text, in points from its top left, with their fonts. `entry.texts` gets
+ * the number of all its pieces, those left out here (rotated, vertical) too.
+ */
 async function pieces(entry) {
   const { page, viewport } = entry;
   // Loads the fonts, whose names tell formulas. Drawing the page uses the same list later.
   await page.getOperatorList();
   const content = await page.getTextContent();
   const out = [];
+  entry.texts = 0;
   for (const item of content.items) {
     if (!item.str) continue;
+    if (item.str.trim()) entry.texts++;
     const [a, b, c, d, e, f] = pdfjs.Util.transform(viewport.transform, item.transform);
     // Rotated or vertical text stays as drawn.
     if (a <= 0 || Math.abs(b) > 0.05 * a) continue;
@@ -307,8 +427,9 @@ async function pieces(entry) {
     const name = font?.name ?? "";
     const ascent = Math.min(1.1, Math.max(0.6, style.ascent || 0.8));
     const descent = Math.min(0.4, Math.max(0.1, -(style.descent || -0.2)));
+    const str = normalize(item.str);
     out.push({
-      str: item.str,
+      str,
       x: e,
       y: f,
       w: item.width * viewport.scale,
@@ -316,235 +437,14 @@ async function pieces(entry) {
       top: f - ascent * size,
       bottom: f + descent * size,
       font: item.fontName,
-      bold: !!font?.bold || BOLD.test(name),
-      italic: !!font?.italic || ITALIC.test(name),
-      mono: !!font?.isMonospace || style.fontFamily === "monospace",
-      serif: font?.isSerifFont ?? style.fontFamily === "serif",
-      math: MATH_FONT.test(name) || mathSymbols(item.str),
+      ...fontKind(name, { mono: font?.isMonospace, serif: font?.isSerifFont ?? style.fontFamily === "serif", bold: font?.bold, italic: font?.italic }),
+      math: isMath(name, str),
     });
   }
   return out;
 }
 
-function mathSymbols(str) {
-  const s = str.trim();
-  return s.length > 0 && s.length <= 4 && MATH_CHAR.test(s) && ![...s].some((ch) => LETTER.test(ch) && !MATH_CHAR.test(ch));
-}
-
-/**
- * Pieces on one baseline, next to each other, make a line; a wide gap (between columns) ends it.
- * Formula pieces only need to overlap the line: radicals, fractions, and large operators sit
- * above and below it, and the parts of a fraction stand over one another.
- */
-function linesOf(items) {
-  const lines = [];
-  let line = null;
-  for (const it of items) {
-    const size = line ? Math.max(line.size, it.size) : it.size;
-    const onBaseline = line && Math.abs(it.y - line.y) < 0.6 * size;
-    const overlaps = line && it.math && it.top < line.bottom && it.bottom > line.top;
-    const after = line && it.x > line.right - (it.math ? 3 : 0.6) * size && it.x - line.right < 1.2 * size;
-    const same = line && (onBaseline || overlaps) && after;
-    if (same) {
-      line.items.push(it);
-      line.right = Math.max(line.right, it.x + it.w);
-      line.top = Math.min(line.top, it.top);
-      line.bottom = Math.max(line.bottom, it.bottom);
-      // The baseline is that of the main text, not of an index or exponent.
-      if (it.size > line.size * 1.05) {
-        line.size = it.size;
-        line.y = it.y;
-      }
-    } else {
-      line = { items: [it], left: it.x, right: it.x + it.w, y: it.y, size: it.size, top: it.top, bottom: it.bottom };
-      lines.push(line);
-    }
-  }
-  for (const ln of lines) describe(ln);
-  return lines;
-}
-
-/** Marks the formula pieces of a line, and what the line mostly is. */
-function describe(line) {
-  const { items } = line;
-  // Digits, signs, and function names beside a formula piece belong to the formula, as do the
-  // small pieces next to it (indices, exponents).
-  for (let pass = 0; pass < 2; pass++) {
-    items.forEach((it, i) => {
-      if (it.math) return;
-      const s = it.str.trim();
-      if (!s) return;
-      const prev = items[i - 1];
-      const next = items[i + 1];
-      const close = 0.6 * line.size;
-      const beside = (prev?.math && it.x - (prev.x + prev.w) < close) || (next?.math && next.x - (it.x + it.w) < close);
-      if (!beside) return;
-      const symbolic = !LETTER.test(s) || MATH_WORD.test(s);
-      const small = it.size < 0.8 * line.size;
-      if (symbolic || small) it.math = true;
-    });
-  }
-  let chars = 0;
-  let math = 0;
-  let words = 0;
-  const weight = new Map();
-  for (const it of items) {
-    const n = it.str.replace(/\s/g, "").length;
-    chars += n;
-    if (it.math) {
-      math += n;
-    } else {
-      words += (it.str.match(/\p{L}{3,}/gu) || []).length;
-      const k = `${it.font}|${it.size.toFixed(1)}`;
-      weight.set(k, (weight.get(k) ?? 0) + n);
-    }
-  }
-  line.chars = chars;
-  // Mostly formula, or a formula with a word or two (`Attention(Q, K, V) = …`).
-  line.math = chars > 0 && (math / chars > 0.5 || (words === 0 && math > 0) || (words <= 2 && math >= 3 && math >= 0.3 * chars));
-  // The line's main font: that of most of its text.
-  const main = [...weight.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  const it = items.find((i) => !i.math && `${i.font}|${i.size.toFixed(1)}` === main) ?? items[0];
-  line.size = it.size;
-  line.bold = it.bold;
-  line.italic = it.italic;
-  line.serif = it.serif;
-  line.mono = it.mono;
-}
-
-/** Lines of one size and weight, close below one another and aligned, make a paragraph. */
-function blocksOf(lines) {
-  const blocks = [];
-  let block = null;
-  for (const ln of lines) {
-    // Formulas on lines of their own stay as drawn, and end the paragraph.
-    if (ln.math || !ln.chars) {
-      block = null;
-      continue;
-    }
-    if (block && continues(block, ln)) {
-      const last = block.lines.at(-1);
-      block.gaps.push(ln.y - last.y);
-      block.lines.push(ln);
-      block.left = Math.min(block.left, ln.left);
-      block.right = Math.max(block.right, ln.right);
-      block.top = Math.min(block.top, ln.top);
-      block.bottom = Math.max(block.bottom, ln.bottom);
-    } else {
-      block = { lines: [ln], gaps: [], left: ln.left, right: ln.right, top: ln.top, bottom: ln.bottom, size: ln.size };
-      blocks.push(block);
-    }
-  }
-  return blocks;
-}
-
-function continues(block, ln) {
-  const last = block.lines.at(-1);
-  const { size } = block;
-  const first = block.lines[0];
-  if (Math.abs(ln.size - size) > 0.15 * size || ln.bold !== first.bold || ln.mono !== first.mono) return false;
-  const gap = ln.y - last.y;
-  if (gap < 0.5 * size || gap > 1.75 * size) return false;
-  if (block.gaps.length && gap > 1.3 * median(block.gaps)) return false;
-  // Indented: the first line of the next paragraph. Elsewhere: another column or box.
-  if (ln.left > block.left + 0.8 * size || ln.left < block.left - 4 * size) return false;
-  if (ln.right < block.left || ln.left > block.right) return false;
-  // The line before ended short of the others: the paragraph ended there.
-  if (block.lines.length >= 2 && last.right < block.right - 3 * size) return false;
-  if (BULLET.test(lineText(ln).trimStart())) return false;
-  return true;
-}
-
-function median(values) {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
-}
-
-function lineText(ln) {
-  return ln.items.map((it) => it.str).join("");
-}
-
-/**
- * The paragraph's content: text, and formulas inside it as boxes to show as images. Lines are
- * joined with a space (none between CJK characters), and a word hyphenated at the end of a
- * line is joined again.
- */
-function partsOf(block) {
-  const parts = [];
-  const text = (s) => {
-    const last = parts.at(-1);
-    if (last?.text !== undefined) last.text += s;
-    else parts.push({ text: s });
-  };
-  const tail = () => parts.at(-1)?.text ?? "";
-  block.lines.forEach((ln, i) => {
-    if (i > 0) {
-      const first = ln.items.find((it) => it.str.trim());
-      const next = first && !first.math ? first.str.trimStart() : "";
-      const before = tail().trimEnd();
-      if (/\p{L}-$/u.test(before) && /^\p{Ll}/u.test(next)) {
-        parts.at(-1).text = before.slice(0, -1);
-      } else if (!(CJK.test(before.at(-1) ?? "") && CJK.test(next[0] ?? ""))) {
-        text(" ");
-      }
-    }
-    let prev = null;
-    for (const it of ln.items) {
-      const gap = prev ? it.x - (prev.x + prev.w) : 0;
-      const spaced = gap > 0.15 * ln.size;
-      if (it.math) {
-        const last = parts.at(-1);
-        if (prev?.math && last?.box) {
-          last.box.left = Math.min(last.box.left, it.x);
-          last.box.right = Math.max(last.box.right, it.x + it.w);
-          last.box.top = Math.min(last.box.top, it.top);
-          last.box.bottom = Math.max(last.box.bottom, it.bottom);
-        } else {
-          if (spaced && !/\s$/.test(tail())) text(" ");
-          parts.push({ box: { left: it.x, right: it.x + it.w, top: it.top, bottom: it.bottom }, baseline: ln.y, size: ln.size, line: ln });
-        }
-      } else {
-        if (prev && spaced && !/\s$/.test(tail()) && !/^\s/.test(it.str)) text(" ");
-        text(it.str);
-      }
-      prev = it;
-    }
-  });
-  for (const part of parts) if (part.text !== undefined) part.text = part.text.replace(/\s+/g, " ");
-  return parts;
-}
-
-/** Whether a paragraph is worth translating: words, not numbers; not a small label in a figure. */
-function worthTranslating(parts, block) {
-  const text = parts.map((p) => p.text ?? "").join("");
-  const visible = text.replace(/\s/g, "");
-  const letters = (text.match(/\p{L}/gu) || []).length;
-  if (letters < 2 || letters < 0.5 * visible.length) return false;
-  const words = (text.match(/\p{L}{2,}/gu) || []).length;
-  const cjk = (text.match(new RegExp(CJK.source, "g")) || []).length;
-  return words >= 3 || cjk >= 4 || block.size >= 0.9 * bodySize;
-}
-
-/** How the paragraph's lines sit: centered (titles), justified, or from the left. */
-function alignment(block) {
-  const { lines } = block;
-  if (lines.length < 2) {
-    const center = (block.left + block.right) / 2;
-    return Math.abs(center - pageCenter) < 0.02 * pageWidth && block.right - block.left < 0.8 * pageWidth ? "center" : "left";
-  }
-  const lefts = lines.map((l) => l.left);
-  const spread = Math.max(...lefts) - Math.min(...lefts);
-  const centers = lines.map((l) => (l.left + l.right) / 2);
-  const centerSpread = Math.max(...centers) - Math.min(...centers);
-  if (spread > block.size && centerSpread < 0.5 * block.size) return "center";
-  // Justified when the lines but the last fill the width; a short block (a name over an
-  // address) would have its few words spread out.
-  const full = lines.slice(0, -1).every((l) => block.right - l.right < block.size);
-  return lines.length >= 3 && full ? "justify" : "left";
-}
-let pageCenter = 0;
-let pageWidth = 0;
-
+/** Finds the page's paragraphs and puts their boxes on it. Returns the number of the page's pieces of text. */
 async function analyze(entry) {
   const items = await pieces(entry);
   const lines = linesOf(items);
@@ -552,17 +452,16 @@ async function analyze(entry) {
   for (const ln of lines) if (!ln.math) sizes.set(ln.size.toFixed(1), (sizes.get(ln.size.toFixed(1)) ?? 0) + ln.chars);
   bodySize = Number([...sizes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 10);
   const { width, height } = entry.viewport;
-  pageCenter = width / 2;
-  pageWidth = width;
   const fragment = document.createDocumentFragment();
-  for (const block of blocksOf(lines)) {
+  const restored = [];
+  for (const block of blocksOf(lines, width)) {
     const parts = partsOf(block);
-    if (!worthTranslating(parts, block)) continue;
+    if (!worthTranslating(parts, block, bodySize)) continue;
     const el = document.createElement("p");
     el.className = `block ${block.lines[0].mono ? "mono" : block.lines[0].serif ? "serif" : "sans"}`;
     if (block.lines[0].bold) el.classList.add("bold");
     if (block.lines[0].italic) el.classList.add("italic");
-    el.dataset.align = alignment(block);
+    el.dataset.align = alignment(block, width);
     // A line (a title, a heading, a name) stays one line: it gets smaller rather than wrap.
     if (block.lines.length === 1) el.classList.add("one-line");
     const pct = (v, of) => `${((v / of) * 100).toFixed(3)}%`;
@@ -573,7 +472,8 @@ async function analyze(entry) {
       height: pct(block.bottom - block.top, height),
     });
     el.style.setProperty("--fs", block.size.toFixed(2));
-    el.style.setProperty("--lh", block.gaps.length ? (median(block.gaps) / block.size).toFixed(3) : "1.15");
+    el.style.setProperty("--lh", lineHeight(block).toFixed(3));
+    const images = [];
     for (const part of parts) {
       if (part.text !== undefined) {
         el.append(part.text);
@@ -605,15 +505,97 @@ async function analyze(entry) {
         verticalAlign: em(part.baseline - box.bottom),
       });
       el.append(img);
+      images.push(img);
     }
+    const place = { page: entry.number, index: entry.blocks.length, maths: images.map((img) => img.dataset.math) };
+    places.set(el, place);
     entry.blocks.push({ el, box: block });
-    originals.set(el, el.textContent.trim());
+    const original = el.textContent.trim();
+    originals.set(el, original);
+    if (restore(el, kept.get(`${place.page}:${place.index}`), original, images)) restored.push(el);
     fragment.append(el);
   }
   entry.section.append(fragment);
   entry.analyzed = true;
+  for (const el of restored) {
+    el.title = originals.get(el);
+    fit(el);
+  }
   paint(entry);
+  return entry.texts;
 }
+
+// ---- Translations kept ----
+
+/** Whether a translation kept (`record`) is the one the settings now would give for `original`. */
+function usable(record, original) {
+  if (record?.source !== original) return false;
+  if (record.lang !== (settings.target === "auto" ? auto : settings.target)) return false;
+  // The style is for Japanese only.
+  return record.lang !== "ja" || (record.style ?? "") === (settings.style ?? "");
+}
+
+/**
+ * Puts a translation kept from before into its paragraph, as page.js left it (which then takes
+ * the paragraph for translated). `images` are the paragraph's formulas, in order. Returns
+ * whether the paragraph now shows a translation.
+ */
+function restore(el, record, original, images) {
+  if (!usable(record, original)) return false;
+  if (!record.parts) {
+    // Left as it was (a name, an address): page.js need not ask again.
+    el.setAttribute("translate", "no");
+    el.dataset.kept = "";
+    return false;
+  }
+  const holder = document.createElement("span");
+  holder.setAttribute("data-plamo-done", "");
+  holder.lang = record.lang;
+  for (const part of record.parts) {
+    if (typeof part === "string") holder.append(part);
+    else if (images[part]) holder.append(images[part]);
+  }
+  el.replaceChildren(holder);
+  el.dataset.kept = "";
+  return true;
+}
+
+/** Keeps the translation page.js put into a paragraph, or forgets the one it took back (Undo). */
+function keep(el) {
+  const place = places.get(el);
+  if (!key || !place) return;
+  const holder = el.querySelector(":scope > [data-plamo-done]");
+  if (holder && !("kept" in el.dataset)) {
+    el.dataset.kept = "";
+    const parts = [];
+    for (const node of holder.childNodes) {
+      const math = node.nodeType === Node.ELEMENT_NODE ? place.maths.indexOf(node.dataset.math) : -1;
+      if (math >= 0) parts.push(math);
+      else if (typeof parts.at(-1) === "string") parts[parts.length - 1] += node.textContent;
+      else parts.push(node.textContent);
+    }
+    const record = { source: originals.get(el), lang: holder.lang, style: settings.style ?? "", parts };
+    pdfStore.putTranslation(key, place.page, place.index, record).catch(() => {});
+  } else if (!holder && "kept" in el.dataset) {
+    delete el.dataset.kept;
+    pdfStore.deleteTranslation(key, place.page, place.index).catch(() => {});
+  }
+}
+
+// page.js says so when a translation is the paragraph's own text, which it then leaves alone.
+$("pages").addEventListener("plamo-same", (event) => {
+  const el = event.target.closest?.(".block");
+  const place = el && places.get(el);
+  if (!key || !place || "kept" in el.dataset) return;
+  el.dataset.kept = "";
+  const record = { source: originals.get(el), lang: event.detail?.lang, style: settings.style ?? "", parts: null };
+  pdfStore.putTranslation(key, place.page, place.index, record).catch(() => {});
+});
+
+chrome.storage.local.onChanged.addListener((changes) => {
+  if (changes.target) settings.target = changes.target.newValue ?? "auto";
+  if (changes.style) settings.style = changes.style.newValue ?? "";
+});
 
 // ---- Translations in their boxes ----
 
@@ -653,6 +635,10 @@ function shrink(el, min, fits) {
   return true;
 }
 
+function fitAll() {
+  for (const entry of pages) for (const { el } of entry.blocks) fit(el);
+}
+
 // The original text of a translated paragraph shows as its tooltip.
 const originals = new WeakMap();
 new MutationObserver((mutations) => {
@@ -665,8 +651,97 @@ new MutationObserver((mutations) => {
     if (!originals.has(el)) continue;
     el.title = el.querySelector("[data-plamo-done]") ? originals.get(el) : "";
     fit(el);
+    keep(el);
   }
 }).observe($("pages"), { childList: true, subtree: true });
+
+// ---- Saving as a PDF ----
+
+// The browser saves what it prints. For print, each page of the PDF is a page of its own size
+// (pdf.css hides the rest), drawn as an image sharp enough for paper, with the translations
+// over it as on screen: text, which stays text in the saved PDF.
+
+/** A page size for print (`@page`) for each size of the PDF's pages. */
+function pageSizes() {
+  const names = new Map();
+  let css = "";
+  for (const entry of pages) {
+    const { width, height } = entry.viewport;
+    const size = `${width.toFixed(2)}pt ${height.toFixed(2)}pt`;
+    if (!names.has(size)) {
+      names.set(size, `size${names.size}`);
+      css += `@page ${names.get(size)} { size: ${size}; margin: 0; }\n.page.${names.get(size)} { page: ${names.get(size)}; }\n`;
+    }
+    entry.section.classList.add(names.get(size));
+  }
+  const style = document.createElement("style");
+  style.textContent = css;
+  document.head.append(style);
+}
+
+/** The page as an image for print, in place of its canvas (which shows only near the view). */
+async function printImage(entry) {
+  const { width, height } = entry.viewport;
+  const k = Math.min(PRINT_PIXELS, Math.sqrt(PRINT_MAX_PIXELS / (width * height)));
+  const viewport = entry.page.getViewport({ scale: k });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.floor(viewport.width);
+  canvas.height = Math.floor(viewport.height);
+  await entry.page.render({ canvas: null, canvasContext: canvas.getContext("2d", { alpha: true }), viewport }).promise;
+  if (entry.analyzed) {
+    // Formulas as sharp as the page; and the colors of a page never shown.
+    cutMaths(entry, canvas);
+    if (!entry.colored) color(entry, canvas);
+  }
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve));
+  canvas.width = canvas.height = 0;
+  if (!blob) throw new Error(`page ${entry.number}: no image`);
+  const img = document.createElement("img");
+  img.className = "print";
+  img.alt = "";
+  img.src = URL.createObjectURL(blob);
+  await img.decode().catch(() => {});
+  entry.section.prepend(img);
+}
+
+async function savePdf() {
+  if (printing || !pages.length) return;
+  const state = window.__plamoPage?.state();
+  // Paragraphs not translated are saved as they are in the PDF.
+  if ((analyzing || (state && (state.waiting || state.stopped))) && !confirm(t("pdfSaveUnfinished"))) return;
+  printing = true;
+  $("save").disabled = true;
+  const info = $("info").textContent;
+  try {
+    for (const entry of pages) {
+      $("info").textContent = t("pdfPreparing", String(entry.number), String(pages.length));
+      await printImage(entry);
+    }
+    // Laid out as in print, so that each translation is fitted to its box as it will print.
+    scale = PRINT_SCALE;
+    document.documentElement.style.setProperty("--s", scale);
+    fitAll();
+    // The formula images just cut are on their way into the page.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Returns when the print dialog is closed, after `afterprint`; were it to return at once,
+    // the pages stay set up for a moment longer.
+    const printed = new Promise((resolve) => addEventListener("afterprint", resolve, { once: true }));
+    window.print();
+    await Promise.race([printed, new Promise((resolve) => setTimeout(resolve, 1000))]);
+  } catch (e) {
+    console.warn("cannot print:", e);
+  } finally {
+    for (const img of document.querySelectorAll("img.print")) {
+      URL.revokeObjectURL(img.src);
+      img.remove();
+    }
+    $("info").textContent = info;
+    $("save").disabled = false;
+    printing = false;
+    fitScale();
+    fitAll();
+  }
+}
 
 // ---- Translating ----
 

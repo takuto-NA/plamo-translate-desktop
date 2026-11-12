@@ -39,7 +39,28 @@ body {
 .toolbar .info { color: var(--muted); flex: 1; white-space: nowrap; }
 .toolbar .toggle { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .toolbar a { white-space: nowrap; }
+.toolbar button {
+  font: inherit;
+  padding: 1px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.toolbar button:disabled { opacity: 0.5; cursor: default; }
+#allow { font: inherit; padding: 4px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--bar); color: inherit; cursor: pointer; }
 .message { margin: 24px auto; max-width: 40em; padding: 0 16px; }
+/* Something to know about the PDF shown (it has no text). */
+.notice {
+  margin: 12px auto 0;
+  max-width: 44em;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bar);
+}
 
 #pages { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 12px 0 48px; }
 /* A page: as large as the PDF's, at the scale --s. Its paragraphs are placed in percent of it. */
@@ -94,3 +115,29 @@ body.original .block { color: transparent !important; background: transparent !i
 body.original .block img.math { visibility: hidden; }
 /* A line of the PDF (a title, a heading) stays a line, unless it does not fit even at half size. */
 .block.one-line:not(.wrapped) { white-space: nowrap; }
+
+/*
+ * Print ("Save as PDF"): each page of the PDF on a page of its own size (pdf-view.js writes the
+ * @page rules), drawn as an image made for it, with nothing of the viewer around.
+ */
+.page img.print { display: none; }
+@media print {
+  /* A CSS point is a PDF point. Over the scale pdf-view.js sets for the window. */
+  :root { --s: 1.333333 !important; }
+  body { background: none; }
+  .toolbar, .message, .notice, [data-plamo] { display: none !important; }
+  #pages { display: block; padding: 0; }
+  .page {
+    /* A hair less than the paper, so that rounding never asks for another sheet. */
+    height: calc(var(--h) * var(--s) * 1px - 0.5px);
+    overflow: hidden;
+    box-shadow: none;
+    break-after: page;
+    break-inside: avoid;
+  }
+  .page:last-child { break-after: auto; }
+  /* The colors under the translations are backgrounds, which print leaves out unless asked. */
+  .page, .block { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page img.print { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+  .page:has(img.print) canvas { display: none; }
+}
