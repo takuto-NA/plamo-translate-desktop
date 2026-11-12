@@ -691,6 +691,10 @@ or, from v0.4.0, on its own with an in-browser engine (see "In-browser engine" b
 - PDFs (`pdf.html`/`pdf-view.js`, from v0.6.0): the browser's PDF viewer is closed to extensions, so a PDF is shown in a viewer of
   the extension's own, where `page.js` translates it like any page.
   - Opening: page translation on a tab whose document is `application/pdf` runs `readPdf` there instead of `page.js`.
+    It fetches the file as the page would (with its cookies, usually from the cache) and sends it to the background in pieces of
+    4 MB (`pdf_chunk`, base64, each answered before the next: a message has a size limit), which go into the store below. The
+    background then opens `pdf.html?src=…&key=…` next to the tab. If the tab could not read the file, the viewer fetches `src`
+    itself, which needs the site's permission, or for `file:` the access to file URLs.
     - The page menu item has the `frame` context too, without which it does not show inside the browser's PDF viewer. A click
       there comes with its tab where the viewer is a frame of it (Chrome 153), but without it (`tab.id` is -1) and with no
       `activeTab` where the viewer is a guest in the tab (`--disable-features=PdfOopif`). `translateFromMenu` then takes the
@@ -702,11 +706,7 @@ or, from v0.4.0, on its own with an in-browser engine (see "In-browser engine" b
       extension's details) and a host permission that covers files (`file:///*`, or all sites). A script in the PDF's own tab
       cannot fetch the file, so local PDFs always come through the viewer's own read. Without the setting, the viewer links
       to the details (`chrome://extensions/?id=…`, opened with `tabs.create`; changing it restarts the extension, which closes
-      its tabs); without the permission, it offers to ask for `file:///*`. It fetches the
-    file as the page would (with its cookies, usually from the cache) and sends it to the background in pieces of 4 MB (`pdf_chunk`,
-    base64, each answered before the next: a message has a size limit), which go into the store below. The background then opens
-    `pdf.html?src=…&key=…` next to the tab. If the tab could not read the file, the viewer fetches `src` itself, which needs the
-    site's permission, or for `file:` the access to file URLs.
+      its tabs); without the permission, it offers to ask for `file:///*`.
   - Drawing: PDF.js (vendored in `extension/vendor/pdfjs`, with its character maps, standard fonts, color profiles and image
     decoders) draws each page on a canvas when it comes near the view, and lets it go far from it. The canvas is transparent where
     the page is, so that text is antialiased in gray: formula images and the colors taken from it would keep subpixel fringes.

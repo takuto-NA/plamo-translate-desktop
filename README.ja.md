@@ -242,6 +242,15 @@ scripts/package-macos.sh
 - `extension/`: ブラウザ拡張（Manifest V3）。
 - `docs/design.md`: 設計書（英語）。
 
+テスト（CI でも同じものを実行します）:
+
+```sh
+cargo test --workspace --release
+for f in tests/extension/*.test.mjs; do node "$f"; done
+```
+
+2 行目は、拡張のうちブラウザなしで動く部分のテストで、Node.js が必要です。
+
 GUI なしでエンジンを動かすコマンドラインの例が 2 つあります。
 
 ```sh

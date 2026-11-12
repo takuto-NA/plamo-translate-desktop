@@ -23,8 +23,8 @@ All notable changes to PLaMo Translate Desktop. Each release's section here also
 
 ### Changed
 
-- **Translate this page with PLaMo** also shows in the right-click menu inside frames of a page (and so in the browser's PDF viewer). It translates the whole page from there too.
 - Starting the app while it runs brings its window to the front, instead of starting a second copy that loads the model again.
+- **Translate this page with PLaMo** also shows in the right-click menu inside frames of a page (and so in the browser's PDF viewer). It translates the whole page from there too.
 
 ### Fixed
 

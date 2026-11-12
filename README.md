@@ -251,6 +251,15 @@ scripts/package-macos.sh
 - `extension/`: the browser extension (Manifest V3).
 - `docs/design.md`: the design document.
 
+The tests (CI runs the same):
+
+```sh
+cargo test --workspace --release
+for f in tests/extension/*.test.mjs; do node "$f"; done
+```
+
+The second line tests the parts of the extension that run without a browser, and needs Node.js.
+
 Two command-line examples run the engine without the GUI:
 
 ```sh
