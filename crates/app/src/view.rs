@@ -358,10 +358,21 @@ struct SyncState {
     /// When a pane was last scrolled to follow the other; its own changes are ignored briefly,
     /// so the two do not chase each other.
     followed_at: [Option<Instant>; 2],
+    /// Notes where a pane scrolled to follow the other came to rest (see [`FOLLOW_APPLIED`]).
+    applied: [Option<Task<()>>; 2],
 }
 
 /// How long a pane's changes are ignored after it was scrolled to follow the other.
 const FOLLOW_SETTLE: Duration = Duration::from_millis(150);
+
+/// How long after a pane was scrolled to follow the other its position is noted. The text input
+/// applies a position set from outside only when it is next drawn, and tells nobody: the pane's
+/// own notification comes before, with the old position. Noted then, the new position would
+/// look like the reader's scrolling at the pane's next notification, whenever that comes (some
+/// tenths of a second later in the report that led here), and the other pane would follow it
+/// back, a line off. Within
+/// [`FOLLOW_SETTLE`], so that nothing takes the old position for a change meanwhile.
+const FOLLOW_APPLIED: Duration = Duration::from_millis(100);
 
 /// The chunk of a long text being translated: its byte range in the source, and how many
 /// tokens had been generated when it started.
@@ -2069,7 +2080,14 @@ impl TranslatorView {
 
     /// Scrolls `side` so that `offset` is `y` below the top of the pane.
     fn scroll_pane(&mut self, side: Side, offset: usize, y: Pixels, cx: &mut Context<Self>) {
-        self.sync.followed_at[side as usize] = Some(Instant::now());
+        let i = side as usize;
+        self.sync.followed_at[i] = Some(Instant::now());
+        self.sync.applied[i] = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(FOLLOW_APPLIED).await;
+            let _ = this.update(cx, |this, cx| {
+                this.sync.scroll_y[i] = this.pane(side).read(cx).scroll_offset().y;
+            });
+        }));
         self.pane(side).clone().update(cx, |state, cx| {
             let Some(line_height) = state.line_height() else {
                 return;
