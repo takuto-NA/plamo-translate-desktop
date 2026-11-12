@@ -8,11 +8,24 @@ All notable changes to PLaMo Translate Desktop. Each release's section here also
 
 - **Translate when copied twice** in Settings ([#7](https://github.com/tanakh/plamo-translate-desktop/issues/7)): select text in any application and press Ctrl+C twice quickly (⌘C on macOS), and the app's window comes to the front and translates it. Only the clipboard is watched, not the keyboard, so no permission is needed. Off by default. On Linux it needs X11, or Xwayland in a Wayland session.
 - **Keep running when the window is closed** in Settings: the app keeps running without its window, which opens again from the icon in the notification area (Windows), the Dock (macOS), or by starting the app again (Linux). The model is released meanwhile and loaded again when the window opens. Off by default. Ctrl+Q (⌘Q) quits.
+- The browser extension translates PDFs: **Translate this page with PLaMo** (or the panel's button, or the shortcut) on a PDF opens it in a new tab, in a viewer of the extension's own, with each paragraph's translation over the paragraph. Figures, tables, and formulas stay as they are, and formulas inside a paragraph keep their place in the translation. See the README for the details.
+  - **Original** shows the PDF as it was, and pointing at a translated paragraph shows its original text.
+  - **Save as PDF** saves the translated PDF through the browser's print dialog (choose **Save as PDF** as the destination): the translations as text, over an image of each page.
+  - The PDF and its translations are kept in the browser, so a reloaded or restored tab goes on where it was. Only the last 5 PDFs opened are kept (256 MB at most together, none for more than 30 days). **Translate again** starts a PDF over.
+  - A PDF without text (scanned pages) cannot be translated, and the viewer says so. Vertical and rotated text stays as it is.
+  - A PDF on this computer needs **Allow access to file URLs** in the extension's details. Where it is off, the viewer says so, with a button that opens the details.
+  - From the right-click menu, the browser's PDF viewer gives the extension no access to the PDF, so the extension's viewer asks for access to the PDF's site, once for each site. The shortcut needs no such step.
 - **Keyboard shortcuts** under **Settings** in the browser extension's panel shows the keys of its shortcuts, and **Set in the browser** opens the browser's page where they are set (`chrome://extensions/shortcuts`, or `edge://extensions/shortcuts` in Edge). The browser does not let an extension set its keys itself.
 
 ### Changed
 
+- **Translate this page with PLaMo** also shows in the right-click menu inside frames of a page (and so in the browser's PDF viewer). It translates the whole page from there too.
 - Starting the app while it runs brings its window to the front, instead of starting a second copy that loads the model again.
+
+### Fixed
+
+- **Translate this page** in the browser extension's panel did nothing where the extension's access to sites is set to "on click" in the browser: the browser neither ran nor refused the request. The panel now explains, and offers to allow the extension on all sites, as it does on other tabs it may not enter.
+- Page translation in the browser extension left alone the parts of a page marked not to be translated, code blocks, and text being edited, but translated content added to them later (as a page loads more). It now leaves that alone too.
 
 ## [0.5.0] - 2026-11-10
 

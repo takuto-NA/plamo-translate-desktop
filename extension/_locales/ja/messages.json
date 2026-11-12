@@ -233,7 +233,7 @@
     }
   },
   "pageNotAllowed": {
-    "message": "ブラウザの制限で、パネルから翻訳できるのは、右クリックメニューかこの拡張機能のショートカットを使ったタブだけです（ツールバーのボタンは含みません。別のサイトに移るまで）。このページを右クリックして「このページを PLaMo で翻訳」を選ぶか、すべてのサイトでの実行を許可してください。"
+    "message": "このページへのアクセスが、まだ拡張機能に許可されていません。次のどちらかで翻訳できます。\n・ページを右クリックして「このページを PLaMo で翻訳」を選ぶ（このタブが別のサイトに移るまで有効です）\n・下のボタンで、すべてのサイトでの実行を許可する（以後はパネルのボタンだけで翻訳できます）"
   },
   "allowAllSites": {
     "message": "すべてのサイトで許可"
@@ -285,6 +285,88 @@
   },
   "pageNothing": {
     "message": "翻訳する文章がありません"
+  },
+  "pdfOriginal": {
+    "message": "原文"
+  },
+  "pdfOpenSource": {
+    "message": "元の PDF を開く"
+  },
+  "pdfLoading": {
+    "message": "PDF を読み込んでいます…"
+  },
+  "pdfLoadFailed": {
+    "message": "PDF を読み込めませんでした: $ERROR$",
+    "placeholders": {
+      "error": {
+        "content": "$1"
+      }
+    }
+  },
+  "pdfFileAccess": {
+    "message": "パソコン上の PDF を読むには、拡張機能の詳細で「ファイルの URL へのアクセスを許可する」をオンにしてから、もう一度 PDF を翻訳してください（設定を変えると拡張機能が再起動し、このタブは閉じます）。"
+  },
+  "pdfOpenDetails": {
+    "message": "拡張機能の詳細を開く"
+  },
+  "pdfNeedsAccess": {
+    "message": "このPDFを読むには、$HOST$ へのアクセスを拡張機能に許可する必要があります。",
+    "placeholders": {
+      "host": {
+        "content": "$1"
+      }
+    }
+  },
+  "pdfAllow": {
+    "message": "$HOST$ へのアクセスを許可",
+    "placeholders": {
+      "host": {
+        "content": "$1"
+      }
+    }
+  },
+  "pdfNeedsFiles": {
+    "message": "このPDFを読むには、パソコン上のファイルへのアクセスを拡張機能に許可する必要があります。"
+  },
+  "pdfAllowFiles": {
+    "message": "ファイルへのアクセスを許可"
+  },
+  "pdfPages": {
+    "message": "$COUNT$ ページ",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "pdfNoText": {
+    "message": "このPDFには文字情報がありません（スキャンした画像などのようです）。翻訳できるのは文字情報を持つPDFだけです。"
+  },
+  "pdfAgain": {
+    "message": "翻訳し直す"
+  },
+  "pdfAgainHint": {
+    "message": "翻訳を破棄して、PDFを最初から翻訳し直します。"
+  },
+  "pdfSave": {
+    "message": "PDFとして保存"
+  },
+  "pdfSaveHint": {
+    "message": "ブラウザーの印刷ダイアログを開きます。送信先に「PDFに保存」を選んでください。"
+  },
+  "pdfSaveUnfinished": {
+    "message": "翻訳がまだ終わっていません。未翻訳の段落は原文のまま保存されます。保存しますか？"
+  },
+  "pdfPreparing": {
+    "message": "保存の準備中（$PAGE$ / $COUNT$ ページ）…",
+    "placeholders": {
+      "page": {
+        "content": "$1"
+      },
+      "count": {
+        "content": "$2"
+      }
+    }
   },
   "pageResume": {
     "message": "再開"

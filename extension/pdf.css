@@ -1,0 +1,143 @@
+:root {
+  color-scheme: light dark;
+  --fg: #1f2328;
+  --muted: #656d76;
+  --bar: #ffffff;
+  --border: #d0d7de;
+  --desk: #e8eaed;
+  /* CSS pixels per PDF point, set by pdf-view.js to fit the window's width. */
+  --s: 1.333;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #e6edf3;
+    --muted: #8d96a0;
+    --bar: #161b22;
+    --border: #30363d;
+    --desk: #2b2d31;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font: 14px/1.5 system-ui, "Segoe UI", "Hiragino Sans", "Noto Sans CJK JP", sans-serif;
+  color: var(--fg);
+  background: var(--desk);
+}
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  background: var(--bar);
+  border-bottom: 1px solid var(--border);
+}
+.toolbar .name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toolbar .info { color: var(--muted); flex: 1; white-space: nowrap; }
+.toolbar .toggle { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.toolbar a { white-space: nowrap; }
+.toolbar button {
+  font: inherit;
+  padding: 1px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.toolbar button:disabled { opacity: 0.5; cursor: default; }
+#allow { font: inherit; padding: 4px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--bar); color: inherit; cursor: pointer; }
+.message { margin: 24px auto; max-width: 40em; padding: 0 16px; }
+/* Something to know about the PDF shown (it has no text). */
+.notice {
+  margin: 12px auto 0;
+  max-width: 44em;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bar);
+}
+
+#pages { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 12px 0 48px; }
+/* A page: as large as the PDF's, at the scale --s. Its paragraphs are placed in percent of it. */
+.page {
+  position: relative;
+  flex: none;
+  width: calc(var(--w) * var(--s) * 1px);
+  height: calc(var(--h) * var(--s) * 1px);
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  /* The page's own colors, whatever the browser's theme. */
+  color-scheme: light;
+}
+.page canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/*
+ * A paragraph's box, over the paragraph as drawn. Until translated its text is transparent, so
+ * the drawn page shows (and the text can still be selected); a translated one covers the
+ * original with the page's color, in the paragraph's size, smaller if it does not fit.
+ */
+.block {
+  position: absolute;
+  margin: 0;
+  overflow: visible;
+  color: transparent;
+  font-size: calc(var(--fs) * var(--s) * var(--fit, 1) * 1px);
+  line-height: var(--lh, 1.2);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.block.serif { font-family: "Times New Roman", "Noto Serif JP", "Yu Mincho", YuMincho, "Hiragino Mincho ProN", "Noto Serif CJK JP", serif; }
+.block.sans { font-family: Arial, "Noto Sans JP", "Yu Gothic", YuGothic, "Hiragino Sans", "Noto Sans CJK JP", sans-serif; }
+.block.mono { font-family: ui-monospace, Consolas, "Noto Sans Mono CJK JP", monospace; }
+.block.bold { font-weight: 700; }
+.block.italic { font-style: italic; }
+.block[data-align="justify"] { text-align: justify; }
+.block[data-align="center"] { text-align: center; }
+.block:has([data-plamo-done]) {
+  color: var(--ink, #000);
+  background: var(--paper, #fff);
+  /* A little past the box too: glyphs overhang their advance, and would peek out at its edges. */
+  box-shadow: 0 0 0 calc(var(--fs) * var(--s) * 0.15px) var(--paper, #fff);
+  /* Japanese is not set in italics. */
+  font-style: normal;
+}
+/* Formulas inside a paragraph: images of them as drawn, shown with the translation only. */
+.block img.math { display: inline-block; }
+.block:not(:has([data-plamo-done])) img.math { visibility: hidden; }
+
+/* The original, as drawn: the boxes stay, transparent. */
+body.original .block { color: transparent !important; background: transparent !important; }
+body.original .block img.math { visibility: hidden; }
+/* A line of the PDF (a title, a heading) stays a line, unless it does not fit even at half size. */
+.block.one-line:not(.wrapped) { white-space: nowrap; }
+
+/*
+ * Print ("Save as PDF"): each page of the PDF on a page of its own size (pdf-view.js writes the
+ * @page rules), drawn as an image made for it, with nothing of the viewer around.
+ */
+.page img.print { display: none; }
+@media print {
+  /* A CSS point is a PDF point. Over the scale pdf-view.js sets for the window. */
+  :root { --s: 1.333333 !important; }
+  body { background: none; }
+  .toolbar, .message, .notice, [data-plamo] { display: none !important; }
+  #pages { display: block; padding: 0; }
+  .page {
+    /* A hair less than the paper, so that rounding never asks for another sheet. */
+    height: calc(var(--h) * var(--s) * 1px - 0.5px);
+    overflow: hidden;
+    box-shadow: none;
+    break-after: page;
+    break-inside: avoid;
+  }
+  .page:last-child { break-after: auto; }
+  /* The colors under the translations are backgrounds, which print leaves out unless asked. */
+  .page, .block { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page img.print { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+  .page:has(img.print) canvas { display: none; }
+}

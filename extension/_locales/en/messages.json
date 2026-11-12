@@ -233,7 +233,7 @@
     }
   },
   "pageNotAllowed": {
-    "message": "The browser lets the panel translate only a tab where the right-click menu or one of the extension's shortcuts was used (not the toolbar button), until it goes to another site. Right-click this page and choose \"Translate this page with PLaMo\", or allow the extension on all sites."
+    "message": "The extension is not allowed to read this page yet. To translate it, do one of these:\n• Right-click the page and choose \"Translate this page with PLaMo\" (this lasts until the tab goes to another site).\n• Allow the extension on all sites with the button below (the panel's button then works on every page)."
   },
   "allowAllSites": {
     "message": "Allow on all sites"
@@ -285,6 +285,88 @@
   },
   "pageNothing": {
     "message": "Nothing to translate"
+  },
+  "pdfOriginal": {
+    "message": "Original"
+  },
+  "pdfOpenSource": {
+    "message": "Open the PDF"
+  },
+  "pdfLoading": {
+    "message": "Reading the PDF…"
+  },
+  "pdfLoadFailed": {
+    "message": "Could not read the PDF: $ERROR$",
+    "placeholders": {
+      "error": {
+        "content": "$1"
+      }
+    }
+  },
+  "pdfFileAccess": {
+    "message": "To read a PDF on this computer, turn on \"Allow access to file URLs\" in the extension's details, then translate the PDF again (the setting restarts the extension, which closes this tab)."
+  },
+  "pdfOpenDetails": {
+    "message": "Open the extension's details"
+  },
+  "pdfNeedsAccess": {
+    "message": "To read this PDF, the extension needs access to $HOST$.",
+    "placeholders": {
+      "host": {
+        "content": "$1"
+      }
+    }
+  },
+  "pdfAllow": {
+    "message": "Allow access to $HOST$",
+    "placeholders": {
+      "host": {
+        "content": "$1"
+      }
+    }
+  },
+  "pdfNeedsFiles": {
+    "message": "To read this PDF, the extension needs access to the files on this computer."
+  },
+  "pdfAllowFiles": {
+    "message": "Allow access to files"
+  },
+  "pdfPages": {
+    "message": "$COUNT$ pages",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "pdfNoText": {
+    "message": "This PDF has no text in it: its pages seem to be images, such as scans. Only PDFs with text can be translated."
+  },
+  "pdfAgain": {
+    "message": "Translate again"
+  },
+  "pdfAgainHint": {
+    "message": "Discards the translations and translates the PDF from the start."
+  },
+  "pdfSave": {
+    "message": "Save as PDF"
+  },
+  "pdfSaveHint": {
+    "message": "Opens the browser's print dialog: choose \"Save as PDF\" as the destination."
+  },
+  "pdfSaveUnfinished": {
+    "message": "The translation is not finished. Paragraphs not translated yet are saved as in the original. Save now?"
+  },
+  "pdfPreparing": {
+    "message": "Preparing page $PAGE$ of $COUNT$…",
+    "placeholders": {
+      "page": {
+        "content": "$1"
+      },
+      "count": {
+        "content": "$2"
+      }
+    }
   },
   "pageResume": {
     "message": "Resume"

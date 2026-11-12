@@ -113,5 +113,8 @@ body > .output {
 }
 .notice { font-size: 13px; border-left: 3px solid var(--error); padding: 4px 8px; }
 .notice code { font-size: 12px; }
+/* A notice may list what to do, a line each, with its button below. */
+#noticeText { white-space: pre-line; }
+#noticeAction:not([hidden]) { display: block; margin-top: 6px; }
 .update-notice { border-left-color: var(--accent); }
 footer { font-size: 11px; color: var(--muted); text-align: right; }

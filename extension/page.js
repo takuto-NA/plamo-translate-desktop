@@ -85,6 +85,12 @@
     );
   }
 
+  /** Whether `el` is left out, itself or with something it is in. */
+  function excluded(el) {
+    for (let e = el; e && e !== document.body; e = e.parentElement) if (skipped(e)) return true;
+    return false;
+  }
+
   /** Inline content kept as it is (code, line breaks, text marked not to translate). */
   function opaque(el) {
     return (
@@ -204,7 +210,11 @@
     const fragment = rebuild(text, elements);
     // Text left as it was (names, code, text already in the target language) is not repeated
     // below the original, nor replaced by itself.
-    if (fragment.textContent.replace(/\s+/g, " ").trim() === runText(run)) return;
+    if (fragment.textContent.replace(/\s+/g, " ").trim() === runText(run)) {
+      // For the PDF viewer, which keeps what was translated: this paragraph stays as it is.
+      anchor(run)?.dispatchEvent(new CustomEvent("plamo-same", { bubbles: true, detail: { lang: target } }));
+      return;
+    }
     if (mode === "below") {
       const box = document.createElement("span");
       box.setAttribute("data-plamo", "");
@@ -299,15 +309,17 @@
     });
     if (!runs.length) return;
     if (!port) connect();
-    // Visible paragraphs first, then the rest in reading order.
+    // Visible paragraphs first, then those below, then those above (nearest first). Each group
+    // goes in document order, which is the reading order also where paragraphs stand side by
+    // side (columns, and the pages of the PDF viewer).
     const height = window.innerHeight;
-    const position = (run) => {
+    const group = (run) => {
       const top = anchor(run)?.getBoundingClientRect().top ?? 0;
-      return top >= -50 && top < height ? top - 1e9 : top < 0 ? 1e9 - top : top;
+      return top >= -50 && top < height ? 0 : top < 0 ? 2 : 1;
     };
     const items = runs
-      .map((run) => ({ run, position: position(run) }))
-      .sort((a, b) => a.position - b.position)
+      .map((run) => ({ run, group: group(run) }))
+      .sort((a, b) => a.group - b.group || inOrder(a.run, b.run) * (a.group === 2 ? -1 : 1))
       .map(({ run }) => {
         const { html, elements } = serialize(run);
         const sid = nextSid++;
@@ -576,6 +588,12 @@
     return run[0].nodeType === Node.ELEMENT_NODE ? run[0] : run[0].parentElement;
   }
 
+  /** -1 if run `a` comes before run `b` in the document, 1 if after. */
+  function inOrder(a, b) {
+    if (a[0] === b[0]) return 0;
+    return a[0].compareDocumentPosition(b[0]) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+  }
+
   // When scrolling stops, the paragraphs in view move to the front of the queue, and those that
   // came near are sent.
   let scrollTimer = null;
@@ -587,9 +605,9 @@
       if (!pending.size || !port) return;
       const height = window.innerHeight;
       const visible = [...pending.entries()]
-        .map(([sid, item]) => ({ sid, rect: anchor(item.run)?.getBoundingClientRect() }))
+        .map(([sid, item]) => ({ sid, run: item.run, rect: anchor(item.run)?.getBoundingClientRect() }))
         .filter(({ rect }) => rect && rect.bottom > -100 && rect.top < height + 100)
-        .sort((a, b) => a.rect.top - b.rect.top)
+        .sort((a, b) => inOrder(a.run, b.run))
         .map(({ sid }) => sid);
       if (visible.length) port?.postMessage({ type: "prioritize", sids: visible });
     }, 250);
@@ -623,16 +641,18 @@
       chrome.runtime.sendMessage({ type: "ui_messages" }).catch(() => null),
     ]);
     uiMessages = messages;
-    mode = settings.pageMode;
+    // The PDF viewer has room for one text in each paragraph's box: it asks for "replace".
+    mode = document.documentElement.dataset.plamoPageMode || settings.pageMode;
     showMarks = settings.pageMarks !== false;
     nearbyOnly = settings.pageNearby === true;
     style = settings.style;
     target = settings.target;
     if (target === "auto") {
-      // Japanese pages go into English, everything else into Japanese.
+      // Japanese pages go into English, everything else into Japanese. The PDF viewer tells
+      // which from the PDF's own text: its page also shows translations kept from before.
       const sample = (document.body.innerText || "").slice(0, 20000);
       const kana = (sample.match(/[\u3040-\u30ff]/g) || []).length;
-      target = kana > sample.length * 0.05 ? "en" : "ja";
+      target = document.documentElement.dataset.plamoPageAuto || (kana > sample.length * 0.05 ? "en" : "ja");
     }
     if (target !== "ja") style = "";
     deferred.clear();
@@ -659,7 +679,9 @@
         // What an inline node was added to is collected again; nested roots once, by the outer.
         const roots = [...new Set([...added].filter((n) => n.isConnected).map((n) => (inline(n) ? (n.parentElement ?? n) : n)))];
         added.clear();
-        const outer = roots.filter((root) => !roots.some((other) => other !== root && other.contains(root)));
+        // Not what was added to a part left out (marked not to translate, code, an editor…):
+        // `collect` checks what it goes into, not where it starts.
+        const outer = roots.filter((root) => !excluded(root) && !roots.some((other) => other !== root && other.contains(root)));
         offer(outer.flatMap((root) => collect(root)));
       }, 500);
     });
@@ -669,6 +691,9 @@
     recheckTimer = setInterval(recheck, 2000);
   }
 
-  window.__plamoPage = { start };
+  /** For the PDF viewer: the paragraphs still to translate, and whether the translation was stopped. */
+  const state = () => ({ waiting: pending.size + deferred.size, stopped });
+
+  window.__plamoPage = { start, state };
   start();
 })();

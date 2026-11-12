@@ -120,6 +120,20 @@ Install the app first (see [Download](#download)), then:
    (what is translated stays). A frame marks the paragraphs being translated (**Settings** in the panel can turn it off).
    Translating another page stops this one, which can be resumed later.
    **Pages** under **Settings** in the panel shows translations below the original instead.
+5. A PDF open in the browser is translated the same way (the right-click menu, the panel's button, or the shortcut):
+   it opens in a new tab, in a viewer of the extension's own, with each paragraph's translation over the paragraph. Figures, tables, and formulas stay as they are.
+   **Original** shows the PDF as it was; pointing at a translated paragraph shows its original text.
+   - **Save as PDF** opens the browser's print dialog: choose **Save as PDF** as the destination. The translations are saved as text
+     over an image of each page. Paragraphs not translated yet are saved as in the original.
+   - The viewer keeps the PDF and its translations in the browser, so reloading the tab, or restoring it with the browser, goes on
+     where it was instead of translating again. Only the last 5 PDFs opened are kept (256 MB at most together, and none for more than 30 days).
+     **Translate again** discards a PDF's translations and starts over.
+   - Only PDFs with text in them: pages that are images, such as scans, cannot be translated (the viewer says so). Vertical and rotated text stays as it is.
+   - From the right-click menu, the browser's PDF viewer gives the extension no access to the PDF: the extension's viewer then asks for
+     access to the PDF's site (**Allow access to …**), once for each site. The shortcut needs no such step.
+   - For a PDF on this computer (`file://`), turn on **Allow access to file URLs** in the extension's details (`chrome://extensions`).
+     Where it is off, the viewer says so, with a button that opens the details. Changing it restarts the extension, which closes the viewer's tab: translate the PDF again.
+     Opened from the right-click menu, the viewer may also ask for access to files (**Allow access to files**), once.
 
 When the app updates itself, the extension in its folder is updated with it, and the panel offers **Reload** to load the new version
 (Developer mode must stay on: Chrome disables unpacked extensions without it).
