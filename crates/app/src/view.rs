@@ -35,7 +35,7 @@ use crate::lang::{self, Choice, SourceChoice, StyleChoice, TargetChoice};
 use crate::models::{ModelsEvent, ModelsPanel};
 use crate::settings::{self, DeviceSetting, DocumentSettings, Settings, ThemeSetting, UiLanguage};
 
-actions!(translator, [CopyTranslation]);
+actions!(translator, [CopyTranslation, TranslateNow]);
 
 const KEY_CONTEXT: &str = "Translator";
 /// Delay between the last keystroke and an automatic translation.
@@ -52,6 +52,13 @@ const STREAM_FRAME: Duration = Duration::from_millis(50);
 const COPY_TRANSLATION_KEY: &str = "cmd-shift-c";
 #[cfg(not(target_os = "macos"))]
 const COPY_TRANSLATION_KEY: &str = "ctrl-shift-c";
+
+#[cfg(target_os = "macos")]
+const TRANSLATE_NOW_KEY: &str = "cmd-enter";
+#[cfg(not(target_os = "macos"))]
+const TRANSLATE_NOW_KEY: &str = "ctrl-enter";
+/// The key context of gpui-kit's text inputs, where it binds its own keys.
+const INPUT_CONTEXT: &str = "Input";
 
 /// Byte offset of the start of the first line visible in `state`.
 fn top_offset(state: &TextareaState) -> Option<usize> {
@@ -308,12 +315,15 @@ const RESIDENT_NOTE: &str = if cfg!(windows) {
     "settings.resident_note_linux"
 };
 
+/// Binds the window's shortcuts. Call after `gpui_kit::init`: the later binding of a key wins.
 pub fn bind_keys(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new(
-        COPY_TRANSLATION_KEY,
-        CopyTranslation,
-        Some(KEY_CONTEXT),
-    )]);
+    cx.bind_keys([
+        KeyBinding::new(COPY_TRANSLATION_KEY, CopyTranslation, Some(KEY_CONTEXT)),
+        // In the text inputs' own context, over gpui-kit's binding of the same key: its Enter
+        // action puts a line break into a multi-line input before it tells of the key, with
+        // Ctrl (Cmd) held too, so the shortcut that translates would also break the line.
+        KeyBinding::new(TRANSLATE_NOW_KEY, TranslateNow, Some(INPUT_CONTEXT)),
+    ]);
 }
 
 type SourceSelect = SelectState<SearchableVec<Choice<SourceChoice>>>;
@@ -1476,25 +1486,19 @@ impl TranslatorView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        match event {
-            InputEvent::Change => {
-                self.source_info = None;
-                self.source_version += 1;
-                let pasted = std::mem::take(&mut self.paste_pending);
-                if self.auto_translate {
-                    if pasted {
-                        self.translate_now(window, cx);
-                    } else {
-                        self.schedule_translation(window, cx);
-                    }
+        if let InputEvent::Change = event {
+            self.source_info = None;
+            self.source_version += 1;
+            let pasted = std::mem::take(&mut self.paste_pending);
+            if self.auto_translate {
+                if pasted {
+                    self.translate_now(window, cx);
+                } else {
+                    self.schedule_translation(window, cx);
                 }
-                // The character count and the style selector depend on the text.
-                cx.notify();
             }
-            InputEvent::PressEnter {
-                secondary: true, ..
-            } => self.translate_now(window, cx),
-            _ => {}
+            // The character count and the style selector depend on the text.
+            cx.notify();
         }
     }
 
@@ -2508,6 +2512,16 @@ impl TranslatorView {
         cx.notify();
     }
 
+    /// Ctrl+Enter (Cmd+Enter) in any of the text inputs: see `bind_keys`.
+    fn translate_now_action(
+        &mut self,
+        _: &TranslateNow,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.translate_now(window, cx);
+    }
+
     fn copy_translation(
         &mut self,
         _: &CopyTranslation,
@@ -2889,6 +2903,7 @@ impl Render for TranslatorView {
         v_flex()
             .key_context(KEY_CONTEXT)
             .on_action(cx.listener(Self::copy_translation))
+            .on_action(cx.listener(Self::translate_now_action))
             .size_full()
             .bg(theme.background)
             .text_color(theme.foreground)
@@ -2983,5 +2998,61 @@ mod tests {
             "0.8B · Q2_K"
         );
         assert_eq!(model_label(Path::new("custom.gguf")), "custom");
+    }
+}
+
+/// Ctrl+Enter (Cmd+Enter) in a text input, with the bindings as the app sets them up.
+#[cfg(test)]
+mod shortcut_tests {
+    use gpui::{TestAppContext, VisualTestContext};
+    use gpui_kit::component::input::{Textarea, TextareaState};
+    use gpui_kit::prelude::*;
+    use gpui_kit::{Context, Entity, Window, WindowOptions, div};
+
+    use super::{KEY_CONTEXT, TRANSLATE_NOW_KEY, TranslateNow, bind_keys};
+
+    /// A text input under the window's key context, counting the requests to translate.
+    struct Probe {
+        text: Entity<TextareaState>,
+        translations: usize,
+    }
+
+    impl Render for Probe {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .key_context(KEY_CONTEXT)
+                .on_action(cx.listener(|this, _: &TranslateNow, _, _| this.translations += 1))
+                .size_full()
+                .child(Textarea::new(&self.text).w_full())
+        }
+    }
+
+    #[gpui::test]
+    fn translating_with_the_shortcut_adds_no_line_break(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            gpui_kit::init(cx);
+            bind_keys(cx);
+        });
+        let (window, probe) = cx.update(|cx| {
+            gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
+                cx.new(|cx| Probe {
+                    text: cx.new(|cx| TextareaState::new(window, cx)),
+                    translations: 0,
+                })
+            })
+            .expect("open the test window")
+        });
+        let text = cx.update(|cx| probe.read(cx).text.clone());
+        let mut cx = VisualTestContext::from_window(window, cx);
+        cx.update(|window, cx| text.update(cx, |state, cx| state.focus(window, cx)));
+        cx.run_until_parked();
+        cx.simulate_input("Hello");
+        cx.simulate_keystrokes(TRANSLATE_NOW_KEY);
+        cx.update(|_, cx| assert_eq!(text.read(cx).value().to_string(), "Hello"));
+        cx.update(|_, cx| assert_eq!(probe.read(cx).translations, 1));
+        // Enter alone still breaks the line, and translates nothing.
+        cx.simulate_keystrokes("enter");
+        cx.update(|_, cx| assert_eq!(text.read(cx).value().to_string(), "Hello\n"));
+        cx.update(|_, cx| assert_eq!(probe.read(cx).translations, 1));
     }
 }

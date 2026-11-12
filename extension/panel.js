@@ -62,7 +62,7 @@ $("target").addEventListener("change", () => {
 });
 $("style").addEventListener("change", () => chrome.storage.local.set({ style: $("style").value }));
 $("pageMode").addEventListener("change", () => chrome.storage.local.set({ pageMode: $("pageMode").value }));
-for (const id of ["pageMarks", "pageNearby", "parallelPages", "checkUpdates"]) {
+for (const id of ["pageMarks", "pageNearby", "keepTranslations", "parallelPages", "checkUpdates"]) {
   $(id).addEventListener("change", () => chrome.storage.local.set({ [id]: $(id).checked }));
 }
 $("uiLanguage").addEventListener("change", () => chrome.storage.local.set({ uiLanguage: $("uiLanguage").value }));
@@ -169,7 +169,20 @@ $("shortcutsLink").addEventListener("click", (e) => {
 });
 // The keys change on the browser's page: they are read again when the panel is back in use.
 window.addEventListener("focus", loadShortcuts);
-$("settings").addEventListener("toggle", () => $("settings").open && loadShortcuts());
+$("settings").addEventListener("toggle", () => {
+  if (!$("settings").open) return;
+  loadShortcuts();
+  // How many translations are kept, as of now.
+  send({ type: "cache" });
+});
+$("clearKept").addEventListener("click", () => send({ type: "clear_cache" }));
+
+/** The number of translations kept, from the background; null until it tells. */
+let keptCount = null;
+function renderKept() {
+  $("keptCount").textContent = keptCount === null ? "" : t("keptCount", String(keptCount));
+  $("clearKept").hidden = !keptCount;
+}
 
 function updateStyleVisibility() {
   // Style applies to Japanese only; "auto" may translate into Japanese.
@@ -189,6 +202,7 @@ function applyLanguage() {
   fill($("target"), TARGETS, langName);
   fill($("style"), STYLES, (style) => t(`style_${style || "default"}`));
   fill($("pageMode"), PAGE_MODES, (mode) => t(`pageMode_${mode}`));
+  renderKept();
   renderEngineSelect();
   const browser = UI_LANGUAGES[chrome.i18n.getMessage("locale")] ?? "";
   fill($("uiLanguage"), ["auto", ...Object.keys(UI_LANGUAGES)], (lang) =>
@@ -277,7 +291,7 @@ $("copy").addEventListener("click", async () => {
 // is first contacted.
 const ready = Promise.all([
   loadUiLanguage(),
-  chrome.storage.local.get({ target: "auto", style: "", pageMode: "replace", pageMarks: true, pageNearby: false, parallelPages: true, checkUpdates: true, engine: "auto", licenseAccepted: false, ...choices }),
+  chrome.storage.local.get({ target: "auto", style: "", pageMode: "replace", pageMarks: true, pageNearby: false, keepTranslations: true, parallelPages: true, checkUpdates: true, engine: "auto", licenseAccepted: false, ...choices }),
 ]).then(([uiLanguage, saved]) => {
   applyLanguage();
   $("uiLanguage").value = uiLanguage;
@@ -286,6 +300,7 @@ const ready = Promise.all([
   $("pageMode").value = saved.pageMode;
   $("pageMarks").checked = saved.pageMarks;
   $("pageNearby").checked = saved.pageNearby;
+  $("keepTranslations").checked = saved.keepTranslations;
   $("parallelPages").checked = saved.parallelPages;
   $("checkUpdates").checked = saved.checkUpdates;
   $("engine").value = saved.engine;
@@ -399,6 +414,10 @@ function onMessage(message) {
       runningPages = new Set(message.running);
       renderPageButton();
       return;
+    case "cache":
+      keptCount = message.count;
+      renderKept();
+      return;
     case "accepted":
       if (currentId === true) currentId = message.id;
       return;
@@ -439,11 +458,13 @@ function onMessage(message) {
       setProgress(() =>
         message.stopped
           ? t("stopped")
-          : message.cut > 0
-            ? t("doneCut", String(message.cut))
-            : speed
-              ? t("doneSpeed", String(message.tokens), speed)
-              : t("done", String(message.tokens)),
+          : message.kept
+            ? t("doneKept")
+            : message.cut > 0
+              ? t("doneCut", String(message.cut))
+              : speed
+                ? t("doneSpeed", String(message.tokens), speed)
+                : t("done", String(message.tokens)),
       );
       finish();
       break;

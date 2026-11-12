@@ -8,8 +8,8 @@
 //
 // The file is kept in the browser under `key` (pdf-store.js): the background puts it there from
 // the tab the PDF was open in, or else it is read here from its address (`src`) and kept then.
-// The translations are kept with it, so a viewer reloaded shows them again and goes on with
-// the rest.
+// A viewer reloaded shows it again, and its paragraphs get the translations they had from those
+// the background keeps (cache.js), as the paragraphs of any page do.
 //
 // "Save as PDF" prints the pages as shown, each on a page of its own size, for the browser to
 // save as a PDF.
@@ -53,14 +53,8 @@ const sizes = new Map();
 let analyzing = true;
 /** The pages are set up for print (see `savePdf`). */
 let printing = false;
-/** Translations kept from before, by "page:index" (see pdf-store.js). */
-let kept = new Map();
-/** The panel's settings the translations are made with. */
-let settings = { target: "auto", style: "" };
 /** The language the "auto" target means for this PDF, which page.js is told (see `autoTarget`). */
 let auto = "ja";
-/** Each paragraph's place: { page, index, maths (the ids of its formulas, in order) }. */
-const places = new WeakMap();
 
 // ---- Loading ----
 
@@ -129,14 +123,17 @@ async function main() {
   $("save").title = t("pdfSaveHint");
   $("save").addEventListener("click", savePdf);
   $("again").title = t("pdfAgainHint");
-  $("again").addEventListener("click", async () => {
-    if (key) await pdfStore.clearTranslations(key).catch(() => {});
+  $("again").addEventListener("click", () => {
+    // Loaded again, with the word to page.js that the translations kept are not to be used.
+    sessionStorage.setItem("fresh", "1");
     location.reload();
   });
+  if (sessionStorage.getItem("fresh")) {
+    sessionStorage.removeItem("fresh");
+    document.documentElement.dataset.plamoPageFresh = "";
+  }
   showMessage(t("pdfLoading"));
 
-  settings = await chrome.storage.local.get(settings);
-  if (key) kept = await pdfStore.translations(key).catch(() => new Map());
   let doc;
   try {
     const data = await loadData();
@@ -226,8 +223,8 @@ async function main() {
 
 /**
  * What the automatic target means here, as page.js decides for a page: a Japanese PDF goes into
- * English, any other into Japanese. From the PDF's text, not the page's, which shows
- * translations kept from before when the viewer is loaded again.
+ * English, any other into Japanese. From the PDF's text, not the page's, which soon shows
+ * translations: those kept from before come at once when the viewer is loaded again.
  */
 async function autoTarget() {
   let sample = "";
@@ -453,7 +450,6 @@ async function analyze(entry) {
   bodySize = Number([...sizes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 10);
   const { width, height } = entry.viewport;
   const fragment = document.createDocumentFragment();
-  const restored = [];
   for (const block of blocksOf(lines, width)) {
     const parts = partsOf(block);
     if (!worthTranslating(parts, block, bodySize)) continue;
@@ -473,7 +469,6 @@ async function analyze(entry) {
     });
     el.style.setProperty("--fs", block.size.toFixed(2));
     el.style.setProperty("--lh", lineHeight(block).toFixed(3));
-    const images = [];
     for (const part of parts) {
       if (part.text !== undefined) {
         el.append(part.text);
@@ -505,97 +500,16 @@ async function analyze(entry) {
         verticalAlign: em(part.baseline - box.bottom),
       });
       el.append(img);
-      images.push(img);
     }
-    const place = { page: entry.number, index: entry.blocks.length, maths: images.map((img) => img.dataset.math) };
-    places.set(el, place);
     entry.blocks.push({ el, box: block });
-    const original = el.textContent.trim();
-    originals.set(el, original);
-    if (restore(el, kept.get(`${place.page}:${place.index}`), original, images)) restored.push(el);
+    originals.set(el, el.textContent.trim());
     fragment.append(el);
   }
   entry.section.append(fragment);
   entry.analyzed = true;
-  for (const el of restored) {
-    el.title = originals.get(el);
-    fit(el);
-  }
   paint(entry);
   return entry.texts;
 }
-
-// ---- Translations kept ----
-
-/** Whether a translation kept (`record`) is the one the settings now would give for `original`. */
-function usable(record, original) {
-  if (record?.source !== original) return false;
-  if (record.lang !== (settings.target === "auto" ? auto : settings.target)) return false;
-  // The style is for Japanese only.
-  return record.lang !== "ja" || (record.style ?? "") === (settings.style ?? "");
-}
-
-/**
- * Puts a translation kept from before into its paragraph, as page.js left it (which then takes
- * the paragraph for translated). `images` are the paragraph's formulas, in order. Returns
- * whether the paragraph now shows a translation.
- */
-function restore(el, record, original, images) {
-  if (!usable(record, original)) return false;
-  if (!record.parts) {
-    // Left as it was (a name, an address): page.js need not ask again.
-    el.setAttribute("translate", "no");
-    el.dataset.kept = "";
-    return false;
-  }
-  const holder = document.createElement("span");
-  holder.setAttribute("data-plamo-done", "");
-  holder.lang = record.lang;
-  for (const part of record.parts) {
-    if (typeof part === "string") holder.append(part);
-    else if (images[part]) holder.append(images[part]);
-  }
-  el.replaceChildren(holder);
-  el.dataset.kept = "";
-  return true;
-}
-
-/** Keeps the translation page.js put into a paragraph, or forgets the one it took back (Undo). */
-function keep(el) {
-  const place = places.get(el);
-  if (!key || !place) return;
-  const holder = el.querySelector(":scope > [data-plamo-done]");
-  if (holder && !("kept" in el.dataset)) {
-    el.dataset.kept = "";
-    const parts = [];
-    for (const node of holder.childNodes) {
-      const math = node.nodeType === Node.ELEMENT_NODE ? place.maths.indexOf(node.dataset.math) : -1;
-      if (math >= 0) parts.push(math);
-      else if (typeof parts.at(-1) === "string") parts[parts.length - 1] += node.textContent;
-      else parts.push(node.textContent);
-    }
-    const record = { source: originals.get(el), lang: holder.lang, style: settings.style ?? "", parts };
-    pdfStore.putTranslation(key, place.page, place.index, record).catch(() => {});
-  } else if (!holder && "kept" in el.dataset) {
-    delete el.dataset.kept;
-    pdfStore.deleteTranslation(key, place.page, place.index).catch(() => {});
-  }
-}
-
-// page.js says so when a translation is the paragraph's own text, which it then leaves alone.
-$("pages").addEventListener("plamo-same", (event) => {
-  const el = event.target.closest?.(".block");
-  const place = el && places.get(el);
-  if (!key || !place || "kept" in el.dataset) return;
-  el.dataset.kept = "";
-  const record = { source: originals.get(el), lang: event.detail?.lang, style: settings.style ?? "", parts: null };
-  pdfStore.putTranslation(key, place.page, place.index, record).catch(() => {});
-});
-
-chrome.storage.local.onChanged.addListener((changes) => {
-  if (changes.target) settings.target = changes.target.newValue ?? "auto";
-  if (changes.style) settings.style = changes.style.newValue ?? "";
-});
 
 // ---- Translations in their boxes ----
 
@@ -651,7 +565,6 @@ new MutationObserver((mutations) => {
     if (!originals.has(el)) continue;
     el.title = el.querySelector("[data-plamo-done]") ? originals.get(el) : "";
     fit(el);
-    keep(el);
   }
 }).observe($("pages"), { childList: true, subtree: true });
 

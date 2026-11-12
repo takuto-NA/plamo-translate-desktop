@@ -13,8 +13,10 @@
 //   offscreen document) and frees the model's memory. Chrome keeps this service worker alive
 //   while the host's connection is open; the in-browser engine sends `keepalive` messages.
 // - The context menus and page.js show texts in the display language chosen in the panel.
+// - Translations are kept (cache.js) and used again: what a page or a panel asks for is looked
+//   up first, and only the rest goes to the engine.
 
-importScripts("i18n.js", "pdf-store.js");
+importScripts("i18n.js", "pdf-store.js", "cache.js");
 
 const HOST = "com.github.tanakh.plamo_translate";
 const IDLE_MS = 5 * 60 * 1000;
@@ -72,9 +74,60 @@ const jobs = new Map();
 const active = new Set();
 /**
  * Page translations by tab: { port, target, style, pending: [{ sid, text }], busySince,
- * busyTokens }. The last two count the tokens since its batches started, for its speed.
+ * busyTokens, lookups, epoch, queue, incognito }. `busySince` and `busyTokens` count the tokens
+ * since its batches started, for its speed. `lookups` are its paragraphs being looked up among
+ * the translations kept (in `queue`, one message after the other), and `epoch` changes when the
+ * page is stopped, which those found out too late go by.
  */
 const pages = new Map();
+
+// ---- Translations kept ----
+
+/** The panel's setting: translations are kept and used again (cache.js). */
+let keepTranslations = true;
+/**
+ * What the engine translates with: { engine, model }, from its last status that told a model.
+ * It is part of what a translation is kept under, and saved, so that the translations kept can
+ * be asked for without starting the engine. Null while not known: before the first status, and
+ * after the panel changed the engine or its model.
+ */
+let madeWith = null;
+const cacheReady = chrome.storage.local
+  .get({ keepTranslations: true, madeWith: null })
+  .then((saved) => {
+    keepTranslations = saved.keepTranslations !== false;
+    madeWith ??= saved.madeWith;
+  })
+  .catch(() => {});
+
+function setMadeWith(value) {
+  if (JSON.stringify(value) === JSON.stringify(madeWith)) return;
+  madeWith = value;
+  chrome.storage.local.set({ madeWith }).catch(() => {});
+}
+
+/**
+ * The keys in the cache of `texts` translated into `target` in `style`, or null where no
+ * translations are kept: with the setting off, or what the engine translates with not known.
+ */
+async function cacheKeys(texts, target, style) {
+  await cacheReady;
+  if (!keepTranslations || !madeWith) return null;
+  return Promise.all(texts.map((text) => translationCache.keyOf({ ...madeWith, target, style, text })));
+}
+
+/** Keeps the translation `text` of `source`; `resolved` is the language `target` came to (for `auto`). */
+async function keepTranslation(source, text, target, style, resolved) {
+  const keys = await cacheKeys([source], target, style);
+  if (keys) await translationCache.put([{ key: keys[0], text, target: resolved, size: source.length + text.length }]);
+}
+
+/** Tells the panels (or `port`) how many translations are kept. */
+async function reportCache(port = null) {
+  const message = { type: "cache", count: await translationCache.count().catch(() => 0) };
+  if (port) post(port, message);
+  else broadcast(message);
+}
 
 // ---- Engines ----
 
@@ -240,6 +293,7 @@ function onHostMessage(connection, message) {
   switch (message.type) {
     case "status":
       status = { ...message, engine: connection.kind };
+      if (message.model) setMadeWith({ engine: connection.kind, model: message.model });
       broadcast(status);
       // The first one tells how many batches the engine runs at once.
       schedule();
@@ -263,6 +317,7 @@ function onHostMessage(connection, message) {
   }
   if (job.kind === "panel") {
     post(job.port, message);
+    onPanelJobMessage(job, message);
   } else if (job.kind === "measure") {
     if (finished) post(job.port, { type: "measured", error: message.type === "error" ? message : null });
   } else {
@@ -270,6 +325,28 @@ function onHostMessage(connection, message) {
   }
   if (finished) schedule();
   reportPages();
+}
+
+/** Follows a panel's translation, to keep it once it is whole. */
+function onPanelJobMessage(job, message) {
+  switch (message.type) {
+    case "started":
+      job.target = message.target;
+      break;
+    case "text":
+      job.text += message.text;
+      break;
+    case "rewind":
+      job.text = job.text.slice(0, message.length);
+      break;
+    case "done":
+      // Not one stopped or cut short: asking again may give all of it.
+      if (!message.stopped && !message.cut && job.text) {
+        const { text, target, style } = job.request;
+        keepTranslation(text, job.text, target, style, job.target).catch(() => {});
+      }
+      break;
+  }
 }
 
 function onBatchMessage(job, message) {
@@ -281,6 +358,7 @@ function onBatchMessage(job, message) {
     if (item) {
       item.done = true;
       post(page?.port, { type: "segment", sid: item.sid, text: message.text });
+      if (page && !page.incognito) keepTranslation(item.text, message.text, page.target, page.style, page.target).catch(() => {});
     }
     // The in-browser engine tells each segment's tokens; the app's host only the batch's.
     if (message.tokens > 0 && !job.cancelled) {
@@ -438,7 +516,7 @@ function schedule() {
 function reportPage(page) {
   const busy = [...jobs.values()].some((job) => job.kind === "page" && pages.get(job.tabId) === page);
   // With the number of segments messages taken, so that one sent meanwhile is not taken as done.
-  if (!busy && !page.pending.length) post(page.port, { type: "idle", received: page.received });
+  if (!busy && !page.pending.length && !page.lookups) post(page.port, { type: "idle", received: page.received });
 }
 
 function broadcast(message) {
@@ -480,6 +558,19 @@ function reportWorking(tabId, page) {
 
 // ---- Panels ----
 
+/** Panels whose translation is being looked up among those kept, with its id. */
+const lookingUp = new Map();
+
+/** The translation kept for a panel's request: { text, target }, or null. */
+async function panelKept({ text, target, style }) {
+  try {
+    const keys = await cacheKeys([text], target, style);
+    return (keys && (await translationCache.get(keys)).get(keys[0])) || null;
+  } catch {
+    return null;
+  }
+}
+
 function onPanelMessage(port, message) {
   switch (message.type) {
     case "hello":
@@ -490,24 +581,54 @@ function onPanelMessage(port, message) {
       if (host) sendHost({ type: "options" });
       break;
     case "translate": {
-      // Starts at once: the host stops whatever runs and reports it done (see onBatchMessage).
-      const job = { id: nextId++, kind: "panel", port };
-      jobs.set(job.id, job);
-      active.clear();
-      active.add(job);
+      const { text, target, style } = message;
+      const job = { id: nextId++, kind: "panel", port, text: "", request: { text, target, style } };
       post(port, { type: "accepted", id: job.id });
-      sendHost({ type: "translate", id: job.id, text: message.text, target: message.target, style: message.style });
-      // The page batches it interrupts are no longer on their runs.
-      reportPages();
+      // A translation kept is the answer; else it goes to the host, unless the panel asked for
+      // another or stopped this one meanwhile.
+      lookingUp.set(port, job.id);
+      panelKept(job.request).then((kept) => {
+        if (lookingUp.get(port) !== job.id) return;
+        lookingUp.delete(port);
+        if (kept) {
+          post(port, { type: "started", id: job.id, target: kept.target ?? target });
+          post(port, { type: "text", id: job.id, text: kept.text });
+          post(port, { type: "done", id: job.id, tokens: 0, cut: 0, stopped: false, cancelled: false, kept: true });
+          return;
+        }
+        // Starts at once: the host stops whatever runs and reports it done (see onBatchMessage).
+        jobs.set(job.id, job);
+        active.clear();
+        active.add(job);
+        sendHost({ type: "translate", id: job.id, text, target, style });
+        // The page batches it interrupts are no longer on their runs.
+        reportPages();
+      });
       break;
     }
     case "cancel":
-      cancelPanel(port);
+      if (lookingUp.has(port)) {
+        // Not at the host yet: it ends here.
+        post(port, { type: "done", id: lookingUp.get(port), tokens: 0, cut: 0, stopped: true, cancelled: true });
+        lookingUp.delete(port);
+      } else {
+        cancelPanel(port);
+      }
       break;
     case "configure":
+      // Another model, perhaps: known again from the status that follows.
+      setMadeWith(null);
+      sendHost(message);
+      break;
     case "options":
     case "status":
       sendHost(message);
+      break;
+    case "cache":
+      reportCache(port);
+      break;
+    case "clear_cache":
+      translationCache.clear().catch(() => {}).then(() => reportCache());
       break;
     // The in-browser engine's models, connecting to it if it was released (or not started yet).
     case "download":
@@ -519,6 +640,7 @@ function onPanelMessage(port, message) {
       break;
     case "set_engine":
       // Saved, then the current engine is released and the new one asked for its options.
+      setMadeWith(null);
       chrome.storage.local.set({ engine: message.engine }).then(() => {
         appAvailable = undefined;
         release("engine");
@@ -696,15 +818,19 @@ function onPageMessage(port, message) {
           post(page.port, { type: "stopped" });
         }
       }
-      const page = pages.get(tabId) ?? { port, pending: [], busySince: null, busyTokens: 0, received: 0 };
+      const page = pages.get(tabId) ?? { port, pending: [], busySince: null, busyTokens: 0, received: 0, lookups: 0, epoch: 0, queue: Promise.resolve() };
       page.received = page.port === port ? page.received + 1 : 1;
       if (message.start) page.startedAt = performance.now();
       page.port = port;
       page.target = message.target;
       page.style = message.style;
-      page.pending.push(...message.items);
+      // Nothing of a private window is kept, nor looked up.
+      page.incognito = !!port.sender?.tab?.incognito;
       pages.set(tabId, page);
-      schedule();
+      // In turn, so that the paragraphs keep their order.
+      const { epoch } = page;
+      page.lookups++;
+      page.queue = page.queue.then(() => admit(tabId, page, epoch, message));
       reportPages();
       break;
     }
@@ -724,9 +850,45 @@ function onPageMessage(port, message) {
   }
 }
 
+/**
+ * Takes a page's paragraphs: those whose translation is kept are answered at once, and the rest
+ * wait for the engine. `fresh` paragraphs are translated whatever is kept (and kept anew).
+ */
+async function admit(tabId, page, epoch, { items, target, style, fresh }) {
+  let rest = items;
+  const hits = [];
+  try {
+    const keys = fresh || page.incognito ? null : await cacheKeys(items.map((item) => item.text), target, style);
+    if (keys) {
+      const found = await translationCache.get(keys);
+      rest = [];
+      items.forEach((item, i) => {
+        const kept = found.get(keys[i]);
+        if (kept) hits.push({ sid: item.sid, text: kept.text });
+        else rest.push(item);
+      });
+    }
+  } catch {
+    // Without the cache, everything is translated.
+    rest = items;
+    hits.length = 0;
+  }
+  page.lookups--;
+  // Stopped meanwhile, or the tab's page went.
+  if (pages.get(tabId) !== page || page.epoch !== epoch) return;
+  for (const { sid, text } of hits) post(page.port, { type: "segment", sid, text });
+  page.pending.push(...rest);
+  schedule();
+  reportPages();
+  reportPage(page);
+}
+
 function stopPage(tabId) {
   const page = pages.get(tabId);
-  if (page) page.pending = [];
+  if (page) {
+    page.pending = [];
+    page.epoch++;
+  }
   for (const job of jobs.values()) {
     if (job.kind !== "page" || job.tabId !== tabId) continue;
     job.cancelled = true;
@@ -788,6 +950,11 @@ let languageReady = loadUiLanguage();
 chrome.storage.local.onChanged.addListener((changes) => {
   // From the next batch on.
   if (changes.parallelPages) parallelPages = changes.parallelPages.newValue !== false;
+  if (changes.keepTranslations) {
+    keepTranslations = changes.keepTranslations.newValue !== false;
+    // Turned off, nothing stays behind.
+    if (!keepTranslations) translationCache.clear().catch(() => {}).then(() => reportCache());
+  }
   if (!changes.uiLanguage) return;
   languageReady = loadUiLanguage().then(() => {
     for (const { id, message } of MENUS) chrome.contextMenus.update(id, { title: t(message) }).catch(() => {});
@@ -802,9 +969,10 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-// The viewer's PDFs not opened for long go, also when no other PDF is opened to make room for.
+// The viewer's PDFs and the translations not used for long go, also when nothing is added.
 chrome.runtime.onStartup.addListener(() => {
   pdfStore.prune().catch(() => {});
+  translationCache.prune().catch(() => {});
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
