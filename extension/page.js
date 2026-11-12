@@ -85,6 +85,12 @@
     );
   }
 
+  /** Whether `el` is left out, itself or with something it is in. */
+  function excluded(el) {
+    for (let e = el; e && e !== document.body; e = e.parentElement) if (skipped(e)) return true;
+    return false;
+  }
+
   /** Inline content kept as it is (code, line breaks, text marked not to translate). */
   function opaque(el) {
     return (
@@ -668,7 +674,9 @@
         // What an inline node was added to is collected again; nested roots once, by the outer.
         const roots = [...new Set([...added].filter((n) => n.isConnected).map((n) => (inline(n) ? (n.parentElement ?? n) : n)))];
         added.clear();
-        const outer = roots.filter((root) => !roots.some((other) => other !== root && other.contains(root)));
+        // Not what was added to a part left out (marked not to translate, code, an editor…):
+        // `collect` checks what it goes into, not where it starts.
+        const outer = roots.filter((root) => !excluded(root) && !roots.some((other) => other !== root && other.contains(root)));
         offer(outer.flatMap((root) => collect(root)));
       }, 500);
     });

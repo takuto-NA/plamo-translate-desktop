@@ -14,6 +14,10 @@ All notable changes to PLaMo Translate Desktop. Each release's section here also
 
 - Starting the app while it runs brings its window to the front, instead of starting a second copy that loads the model again.
 
+### Fixed
+
+- Page translation in the browser extension left alone the parts of a page marked not to be translated, code blocks, and text being edited, but translated content added to them later (as a page loads more). It now leaves that alone too.
+
 ## [0.5.0] - 2026-11-10
 
 ### Added
