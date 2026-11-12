@@ -11,10 +11,14 @@ All notable changes to PLaMo Translate Desktop. Each release's section here also
 - The browser extension translates PDFs: **Translate this page with PLaMo** (or the panel's button, or the shortcut) on a PDF opens it in a new tab, in a viewer of the extension's own, with each paragraph's translation over the paragraph. Figures, tables, and formulas stay as they are, and formulas inside a paragraph keep their place in the translation. See the README for the details.
   - **Original** shows the PDF as it was, and pointing at a translated paragraph shows its original text.
   - **Save as PDF** saves the translated PDF through the browser's print dialog (choose **Save as PDF** as the destination): the translations as text, over an image of each page.
-  - The PDF and its translations are kept in the browser, so a reloaded or restored tab goes on where it was. Only the last 5 PDFs opened are kept (256 MB at most together, none for more than 30 days). **Translate again** starts a PDF over.
+  - The PDF is kept in the browser, so a reloaded or restored tab shows it again, with the translations it had (see the translations kept, below). Only the last 5 PDFs opened are kept (256 MB at most together, none for more than 30 days). **Translate again** translates a PDF anew.
   - A PDF without text (scanned pages) cannot be translated, and the viewer says so. Vertical and rotated text stays as it is.
   - A PDF on this computer needs **Allow access to file URLs** in the extension's details. Where it is off, the viewer says so, with a button that opens the details.
   - From the right-click menu, the browser's PDF viewer gives the extension no access to the PDF, so the extension's viewer asks for access to the PDF's site, once for each site. The shortcut needs no such step.
+- The browser extension keeps translations and uses them again ([#9](https://github.com/tanakh/plamo-translate-desktop/issues/9)): text translated before is shown at once instead of being translated again, on a page loaded again, in a PDF reopened, and for the same text in the panel (which then says **translated before**).
+  - A translation is used again only for the same text with the same engine and model, target language, and style.
+  - They are kept in this browser only: up to about 8 million characters, the least recently used going first, and none not used for 30 days. Nothing of a private (incognito) window is kept.
+  - **Keep translations to use them again** under **Settings** in the panel turns this off, which also removes what is kept; **Clear** there removes it at any time, next to the number kept.
 - **Keyboard shortcuts** under **Settings** in the browser extension's panel shows the keys of its shortcuts, and **Set in the browser** opens the browser's page where they are set (`chrome://extensions/shortcuts`, or `edge://extensions/shortcuts` in Edge). The browser does not let an extension set its keys itself.
 
 ### Changed

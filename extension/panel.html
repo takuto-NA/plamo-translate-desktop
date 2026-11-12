@@ -50,6 +50,13 @@
       <label class="check"><input type="checkbox" id="pageMarks" /><span data-i18n="pageMarks"></span></label>
       <label class="check"><input type="checkbox" id="pageNearby" /><span data-i18n="pageNearby"></span></label>
       <p class="hint check-hint" data-i18n="pageNearbyHint"></p>
+      <!-- Translations kept to be used again (cache.js): the switch, how many, and a way to drop them. -->
+      <label class="check"><input type="checkbox" id="keepTranslations" /><span data-i18n="keepTranslations"></span></label>
+      <p class="hint check-hint">
+        <span data-i18n="keepTranslationsHint"></span>
+        <span id="keptCount"></span>
+        <button id="clearKept" class="small" data-i18n="clearKept"></button>
+      </p>
       <!-- The in-browser engine's batches side by side: faster, with less context. -->
       <div id="parallelRow" hidden>
         <label class="check"><input type="checkbox" id="parallelPages" /><span data-i18n="parallelPages"></span></label>

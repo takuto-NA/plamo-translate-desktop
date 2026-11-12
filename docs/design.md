@@ -725,14 +725,14 @@ or, from v0.4.0, on its own with an in-browser engine (see "In-browser engine" b
     shows, and the text can be selected and searched). `pdf.html` asks `page.js` for the replace mode. A translated paragraph covers
     the original with the page's color under it and takes the text's color (both sampled from the canvas), in the paragraph's
     size and line height, made smaller until it fits its box (to 60%; a single line to 50% before it wraps).
-  - The store (`pdf-store.js`, IndexedDB; `evict` is tested by `tests/extension/pdf-store.test.mjs`): the file in chunks, and each
-    paragraph's translation by page and index with its source text, language and style. A viewer that loads (again) reads the file
-    from the store and puts back the translations whose source text and settings still match, as `page.js` would have left them, so
-    it sends only the rest. Paragraphs whose translation was their own text (names, addresses; `page.js` tells with a `plamo-same`
-    event) are marked `translate="no"` instead of being asked for again. What "auto" means as the target is decided from the PDF's
-    own text and told to `page.js` (`data-plamo-page-auto`): the page's text is partly translations once some are put back. Only the last 5 files opened are kept, 256 MB at most
-    together (the last one whatever its size), none for more than 30 days: `prune` runs when a file is stored and when the browser starts.
-    A file that cannot be shown (not a PDF: a sign-in page in its place, say) is removed, so the next try reads it again.
+  - The store (`pdf-store.js`, IndexedDB; `evict` is tested by `tests/extension/pdf-store.test.mjs`): the file in chunks. A viewer
+    that loads (again) reads the file from the store. Only the last 5 files opened are kept, 256 MB at most together (the last one
+    whatever its size), none for more than 30 days: `prune` runs when a file is stored and when the browser starts. A file that
+    cannot be shown (not a PDF: a sign-in page in its place, say) is removed, so the next try reads it again.
+  - Translations are not kept with the file: the viewer's paragraphs get them back from the translations the background keeps
+    (below), like the paragraphs of any page loaded again. "Translate again" loads the viewer again with `data-plamo-page-fresh`,
+    on which `page.js` marks its paragraphs `fresh`, to be translated whatever is kept. What "auto" means as the target is decided
+    from the PDF's own text and told to `page.js` (`data-plamo-page-auto`): the page's text soon is partly translations.
   - Saving (`savePdf`): there is no way for an extension to write a PDF but printing, so the viewer prints. It draws every page as
     an image at 200 pixels per inch (PNG, the canvases would take too much memory), lays the pages out at the print scale (a CSS
     point for a PDF point) and fits the translations again there, then calls `window.print()`. The print styles give each page a
@@ -741,6 +741,27 @@ or, from v0.4.0, on its own with an in-browser engine (see "In-browser engine" b
   - Later: paragraphs that go on across columns and pages are translated in parts; table cells of one row close together are read
     as one line; writing the translations into the PDF itself (keeping its vector graphics) would need an embedded font and the
     layout done by hand.
+- Translations kept (`cache.js`, from v0.6.0; `keyOf` and `evict` are tested by `tests/extension/cache.test.mjs`): the background
+  keeps each translation in IndexedDB and answers from there before it asks the engine.
+  - A translation is kept under the SHA-256 hash of the engine (`app` or `browser`), its model (the label in its status), the
+    target language, the style, and the text (for a page, the run's indexed HTML). Only the hash, the translation, its size, and
+    when it was last used are stored. The model comes from the engine's last status that told one, saved (`madeWith`) so that a
+    lookup does not start the engine; it is forgotten when the panel changes the engine or its model, until the next status.
+    (A model changed in the app while the host does not run is noticed only when the host next starts.)
+  - Pages: the paragraphs of a `segments` message are looked up together (`admit`); those kept are answered at once as `segment`
+    messages, and only the rest wait for the engine. The lookups of a page run one after the other, a page is not told `idle`
+    while one runs, and a page stopped meanwhile (`epoch`) takes nothing from it. Each `segment` from the engine is kept.
+  - The panel: a `translate` request is looked up before it goes to the host (a `cancel` meanwhile ends it there); a kept one is
+    answered as `started`, one `text`, and `done` with `kept`. A translation is kept when it ends whole, not stopped or cut.
+  - Limits: 8 million characters (texts and translations together), the least recently used going first, none not used for 30
+    days, and no single text over 200,000 characters; checked every 200 translations added and when the browser starts.
+    Nothing of an incognito tab is looked up or kept. The panel's setting (`keepTranslations`) turns it off and clears it.
+  - History: a paragraph answered from the cache is not in the request, so the ones translated beside it lack it as history,
+    as the first paragraph of every batch lacks the batch before. Measured with ten connected paragraphs (2B, CPU): of five
+    translated without their neighbors in between, three came out the same as with all ten together and two differed in wording;
+    each alone, two were the same, and three changed terms (`job` to 仕事 for ジョブ, `workers` to 作業員) or the register.
+    It matters only where a page is partly kept; passing the kept neighbors as history would need `translate_segments` to
+    take known translations, in both engines.
 - Limits:
   - The host loads its own copy of the model, so with the app open the model is in memory twice. Relaying to a running app would avoid that.
   - Browsers installed as Snap or Flatpak packages on Linux cannot start programs outside their sandbox.
@@ -825,7 +846,7 @@ v0.3.0: Intel NPUs through OpenVINO, and automatic device selection that measure
 v0.4.0 (2026-11-07): the extension's in-browser engine (§12), the macOS package (Apple Silicon), and the extension alone as a package.
 v0.5.0 (2026-11-10): updates of the app, which the extension follows (§11), new versions of the models (§7), the models folder,
 and the UI size (§9).
-v0.6.0: translating on a double copy and staying resident (§9.1), and PDFs in the extension (§12).
+v0.6.0: translating on a double copy and staying resident (§9.1), and in the extension PDFs and the translations kept (§12).
 
 Possible later work:
 

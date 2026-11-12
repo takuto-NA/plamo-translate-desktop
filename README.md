@@ -125,15 +125,21 @@ Install the app first (see [Download](#download)), then:
    **Original** shows the PDF as it was; pointing at a translated paragraph shows its original text.
    - **Save as PDF** opens the browser's print dialog: choose **Save as PDF** as the destination. The translations are saved as text
      over an image of each page. Paragraphs not translated yet are saved as in the original.
-   - The viewer keeps the PDF and its translations in the browser, so reloading the tab, or restoring it with the browser, goes on
-     where it was instead of translating again. Only the last 5 PDFs opened are kept (256 MB at most together, and none for more than 30 days).
-     **Translate again** discards a PDF's translations and starts over.
+   - The viewer keeps the PDF in the browser, so reloading the tab, or restoring it with the browser, shows it again, with the
+     translations it had (see the translations kept, below). Only the last 5 PDFs opened are kept (256 MB at most together, and none for more than 30 days).
+     **Translate again** translates a PDF anew.
    - Only PDFs with text in them: pages that are images, such as scans, cannot be translated (the viewer says so). Vertical and rotated text stays as it is.
    - From the right-click menu, the browser's PDF viewer gives the extension no access to the PDF: the extension's viewer then asks for
      access to the PDF's site (**Allow access to …**), once for each site. The shortcut needs no such step.
    - For a PDF on this computer (`file://`), turn on **Allow access to file URLs** in the extension's details (`chrome://extensions`).
      Where it is off, the viewer says so, with a button that opens the details. Changing it restarts the extension, which closes the viewer's tab: translate the PDF again.
      Opened from the right-click menu, the viewer may also ask for access to files (**Allow access to files**), once.
+
+The extension keeps translations and uses them again: text translated before is shown at once instead of being translated again,
+on a page loaded again, in a PDF reopened, and for the same text in the panel. A translation is used again only for the same text
+with the same engine and model, target language, and style. They are kept in this browser only (up to about 8 million characters,
+the least recently used going first, and none not used for 30 days), and nothing of a private (incognito) window is kept.
+**Keep translations to use them again** under **Settings** in the panel turns this off, which also removes what is kept, and **Clear** there removes it at any time.
 
 When the app updates itself, the extension in its folder is updated with it, and the panel offers **Reload** to load the new version
 (Developer mode must stay on: Chrome disables unpacked extensions without it).

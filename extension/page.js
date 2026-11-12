@@ -210,11 +210,7 @@
     const fragment = rebuild(text, elements);
     // Text left as it was (names, code, text already in the target language) is not repeated
     // below the original, nor replaced by itself.
-    if (fragment.textContent.replace(/\s+/g, " ").trim() === runText(run)) {
-      // For the PDF viewer, which keeps what was translated: this paragraph stays as it is.
-      anchor(run)?.dispatchEvent(new CustomEvent("plamo-same", { bubbles: true, detail: { lang: target } }));
-      return;
-    }
+    if (fragment.textContent.replace(/\s+/g, " ").trim() === runText(run)) return;
     if (mode === "below") {
       const box = document.createElement("span");
       box.setAttribute("data-plamo", "");
@@ -328,7 +324,8 @@
       });
     total += items.length;
     sends++;
-    port.postMessage({ type: "segments", items, target, style, start });
+    // `fresh`: translated again whatever translations are kept (the PDF viewer's "Translate again").
+    port.postMessage({ type: "segments", items, target, style, start, fresh: "plamoPageFresh" in document.documentElement.dataset });
     render();
   }
 

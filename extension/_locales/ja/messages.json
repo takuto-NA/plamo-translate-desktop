@@ -54,6 +54,9 @@
       }
     }
   },
+  "doneKept": {
+    "message": "完了 · 保存済みの翻訳"
+  },
   "stopped": {
     "message": "中止しました"
   },
@@ -764,6 +767,24 @@
   "pageNearbyHint": {
     "message": "続きはスクロールに合わせて訳します。",
     "description": "Explanation under the near-the-view setting"
+  },
+  "keepTranslations": {
+    "message": "翻訳結果を保存して再利用する",
+    "description": "Setting: translations are kept in the browser and reused when the same text is translated again"
+  },
+  "keepTranslationsHint": {
+    "message": "一度訳した文章（再読み込みしたページ、開き直した PDF など）は、訳し直さずにすぐ表示します。保存先はこのブラウザ内だけで、シークレット ウィンドウの内容は保存しません。"
+  },
+  "keptCount": {
+    "message": "$COUNT$ 件を保存中。",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "clearKept": {
+    "message": "消去"
   },
   "extensionUpdated": {
     "message": "拡張機能のファイルが $VERSION$ に更新されています。再読み込みすると使えます。",

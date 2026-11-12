@@ -54,6 +54,9 @@
       }
     }
   },
+  "doneKept": {
+    "message": "Done · translated before"
+  },
   "stopped": {
     "message": "Stopped"
   },
@@ -764,6 +767,24 @@
   "pageNearbyHint": {
     "message": "The rest is translated as you scroll to it.",
     "description": "Explanation under the near-the-view setting"
+  },
+  "keepTranslations": {
+    "message": "Keep translations to use them again",
+    "description": "Setting: translations are kept in the browser and reused when the same text is translated again"
+  },
+  "keepTranslationsHint": {
+    "message": "Text translated before (a page loaded again, a PDF reopened) is shown at once instead of being translated again. Kept in this browser only, not for private windows."
+  },
+  "keptCount": {
+    "message": "$COUNT$ kept.",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "clearKept": {
+    "message": "Clear"
   },
   "extensionUpdated": {
     "message": "The extension's files are now version $VERSION$. Reload it to use them.",

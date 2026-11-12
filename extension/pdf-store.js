@@ -1,6 +1,6 @@
-// Keeps the PDFs of the extension's viewer (pdf.html) and their translations in the browser
-// (IndexedDB), so that a viewer reloaded, or restored with the browser, shows its PDF again
-// with what was translated. Only the PDFs opened last are kept (see `evict`).
+// Keeps the PDFs of the extension's viewer (pdf.html) in the browser (IndexedDB), so that a
+// viewer reloaded, or restored with the browser, shows its PDF again. Only the PDFs opened last
+// are kept (see `evict`). Their translations are kept like any others (cache.js).
 //
 // Loaded as a plain script by the background (importScripts) and by pdf.html, and by the tests
 // (tests/extension/pdf-store.test.mjs) for `evict`.
@@ -8,10 +8,6 @@
 // - `files`: { key, url, opened, complete, size, chunks } by key (the viewer's `key`).
 // - `chunks`: the file's bytes in pieces (ArrayBuffer), by [key, index]. The background gets
 //   them one by one from the tab the PDF was open in.
-// - `translations`: { source, lang, style, parts } by [key, page, index]: the paragraph `index`
-//   of `page`, whose text was `source`, translated into `lang` in `style` (the panel's
-//   settings). `parts` are strings and numbers, a number for the paragraph's formula of that
-//   index; or null where the translation was the text itself, which is not asked for again.
 
 var pdfStore = (() => {
   const NAME = "pdf";
@@ -57,7 +53,6 @@ var pdfStore = (() => {
         const db = request.result;
         db.createObjectStore("files", { keyPath: "key" });
         db.createObjectStore("chunks");
-        db.createObjectStore("translations");
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => {
@@ -144,63 +139,31 @@ var pdfStore = (() => {
     return { url: file.url, bytes };
   }
 
-  /** The file's translations: a Map from "page:index" to { source, lang, style, parts }. */
-  async function translations(key) {
-    const db = await open();
-    const store = db.transaction(["translations"]).objectStore("translations");
-    const [keys, values] = await Promise.all([wait(store.getAllKeys(all(key))), wait(store.getAll(all(key)))]);
-    return new Map(keys.map(([, page, index], i) => [`${page}:${index}`, values[i]]));
-  }
-
-  /** Keeps a paragraph's translation, if its file is kept. */
-  function putTranslation(key, page, index, value) {
-    return transact(["files", "translations"], "readwrite", (files, translations) => {
-      const request = files.count(key);
-      request.onsuccess = () => {
-        if (request.result) translations.put(value, [key, page, index]);
-      };
-    });
-  }
-
-  function deleteTranslation(key, page, index) {
-    return transact(["translations"], "readwrite", (translations) => {
-      translations.delete([key, page, index]);
-    });
-  }
-
-  function clearTranslations(key) {
-    return transact(["translations"], "readwrite", (translations) => {
-      translations.delete(all(key));
-    });
-  }
-
-  /** Removes the file `key`, with its translations. */
+  /** Removes the file `key`. */
   function remove(key) {
-    return transact(["files", "chunks", "translations"], "readwrite", (files, chunks, translations) => {
+    return transact(["files", "chunks"], "readwrite", (files, chunks) => {
       files.delete(key);
       chunks.delete(all(key));
-      translations.delete(all(key));
     });
   }
 
-  /** Removes the files `evict` names, with their translations. */
+  /** Removes the files `evict` names. */
   async function prune() {
     const db = await open();
     const files = await wait(db.transaction(["files"]).objectStore("files").getAll());
     const keys = evict(files, Date.now());
     if (!keys.length) return;
-    await transact(["files", "chunks", "translations"], "readwrite", (files, chunks, translations) => {
+    await transact(["files", "chunks"], "readwrite", (files, chunks) => {
       for (const key of keys) {
         files.delete(key);
         chunks.delete(all(key));
-        translations.delete(all(key));
       }
     });
   }
 
   return {
     MAX_FILES, MAX_BYTES, MAX_AGE_MS, INCOMPLETE_MS,
-    evict, begin, putChunk, finish, put, get, translations, putTranslation, deleteTranslation, clearTranslations, remove, prune,
+    evict, begin, putChunk, finish, put, get, remove, prune,
   };
 })();
 
