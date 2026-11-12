@@ -423,9 +423,7 @@ impl Host {
             None | Some("auto") => {
                 let japanese = match &input {
                     Input::Text(text) => appdata::looks_japanese(text),
-                    Input::Segments(segments) => {
-                        segments.iter().any(|s| appdata::looks_japanese(s))
-                    }
+                    Input::Segments(segments) => appdata::looks_japanese(&segments.concat()),
                 };
                 if japanese { "en" } else { "ja" }
             }

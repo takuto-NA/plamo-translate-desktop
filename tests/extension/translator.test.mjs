@@ -53,6 +53,15 @@ check(
   [resolveTarget("auto", "こんにちは"), resolveTarget("auto", "漢字"), resolveTarget("auto", "Hello"), resolveTarget("fr", "こんにちは")],
   ["en", "ja", "ja", "fr"],
 );
+check(
+  "auto by the share of Japanese letters",
+  [
+    resolveTarget("auto", "Rust と GPUI で実装する"),
+    resolveTarget("auto", "npm install --save-dev typescript を実行"),
+    resolveTarget("auto", 'The first example translates a text into English: translate --to en "こんにちは"'),
+  ],
+  ["en", "en", "ja"],
+);
 check("estimate", [estimateTokens("abcdefgh"), estimateTokens("日本語"), estimateTokens("")], [2, 3, 0]);
 
 const rebuilt = (s) => s.leading + s.chunks.map((c) => c.text + c.separator).join("");

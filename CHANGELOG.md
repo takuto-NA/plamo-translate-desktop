@@ -29,6 +29,8 @@ All notable changes to PLaMo Translate Desktop. Each release's section here also
 ### Fixed
 
 - Ctrl+Enter (⌘Enter on macOS) in the app translates without also putting a line break into the text ([#8](https://github.com/tanakh/plamo-translate-desktop/issues/8)). In the context and glossary fields it now translates too, instead of breaking the line.
+- With the source and the translation scrolling together, a pane sometimes moved by a line a moment after the scrolling stopped. The pane that had followed the other was taken for scrolled by the reader, and the other followed it back.
+- **Japanese ⇄ English (auto)** took a text for Japanese when it had a single kana, so an English text that quotes a Japanese word (a manual with `こんにちは` in an example) was translated into English, which left it as it was. A text now counts as Japanese when kana and kanji make up a tenth of its letters or more, in the app and in the browser extension's panel. Pages and PDFs went by a share already.
 - **Translate this page** in the browser extension's panel did nothing where the extension's access to sites is set to "on click" in the browser: the browser neither ran nor refused the request. The panel now explains, and offers to allow the extension on all sites, as it does on other tabs it may not enter.
 - Page translation in the browser extension left alone the parts of a page marked not to be translated, code blocks, and text being edited, but translated content added to them later (as a page loads more). It now leaves that alone too.
 

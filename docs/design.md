@@ -392,8 +392,10 @@ The implementation is `engine::llama::Session` (one llama.cpp context of a loade
     `gpui-pre` itself: gpui-kit's own `test-support` asks for another version of taffy than the lock file has).
 - Languages:
   - The default source is "Detect language".
-  - The default target is "Japanese ⇄ English (auto)": text with kana goes to English, and everything else goes to Japanese.
-    Kanji alone does not count, because it may be Chinese.
+  - The default target is "Japanese ⇄ English (auto)": Japanese text goes to English, and everything else goes to Japanese.
+    Text is Japanese when it has kana (kanji alone could be Chinese), and kana and kanji make up a tenth of its letters or more
+    (`appdata::looks_japanese`; `resolveTarget` in the extension goes by the same rule): one kana used to be enough, which sent
+    an English text quoting a Japanese word, such as this project's README, into English.
   - Swapping exchanges explicit languages and moves the translation into the source pane.
 - The title bar is drawn by the app (gpui-kit `TitleBar`) on every platform.
   Wayland compositors such as WSLg and GNOME do not draw server-side decorations.
@@ -423,6 +425,9 @@ The implementation is `engine::llama::Session` (one llama.cpp context of a loade
   - Scrolling a pane scrolls the other so the counterpart of its first visible line is at the top.
     Moving the caret selects the counterpart paragraph in the other pane, level with the caret; each pane keeps its selection visible while the other has focus.
   - A pane that was scrolled to follow ignores its own changes for 150 ms, so the two do not chase each other.
+    Its new position is noted 100 ms after it was set: the text input applies a position set from outside only when it is
+    next drawn, without a notification, so the one it sends at once still shows the old position. Left at that, the pane's
+    next notification looked like the reader's scrolling, and the other pane followed it back, a line off.
   - It applies while the source is the text that was translated; cached results keep their chunks for it.
 - Theme: Settings → Theme (System, Light, or Dark). System follows the OS, including changes while the app runs.
   The light and dark themes come from gpui-kit.

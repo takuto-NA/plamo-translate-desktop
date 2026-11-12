@@ -11,7 +11,9 @@ const VAL = "<|plamo:val|>";
 /** The token that starts the next element: generation stops there. */
 export const STOP = TAG;
 
-const KANA = /[぀-ゟ゠-ヿ]/;
+const KANA = /[\u3040-\u30ff\u31f0-\u31ff]/g;
+const KANJI = /[\u3400-\u4dbf\u4e00-\u9fff]/g;
+const LETTER = /\p{Alphabetic}/gu;
 
 /**
  * Text as the model reads it. wllama tokenizes the prompt as one string, special tokens included,
@@ -22,10 +24,18 @@ export function escape(text) {
   return text.replaceAll("<|", "<​|");
 }
 
-/** `auto` is Japanese ⇄ English, as in the app: text with kana into English, the rest into Japanese. */
+/**
+ * `auto` is Japanese ⇄ English, as in the app (`looks_japanese` in crates/appdata): Japanese text
+ * into English, the rest into Japanese. Text is Japanese when it has kana, and kana and kanji
+ * make up a tenth of its letters or more: an English text that quotes a few Japanese words is not.
+ */
 export function resolveTarget(target, text) {
   if (target && target !== "auto") return target;
-  return KANA.test(text) ? "en" : "ja";
+  const count = (text, pattern) => (text.match(pattern) || []).length;
+  const kana = count(text, KANA);
+  const japanese = kana + count(text, KANJI);
+  const other = count(text.replace(KANA, "").replace(KANJI, ""), LETTER);
+  return kana > 0 && japanese * 9 >= other ? "en" : "ja";
 }
 
 /**
