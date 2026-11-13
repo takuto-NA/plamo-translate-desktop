@@ -22,6 +22,11 @@ env:
   CARGO_INCREMENTAL: 0
   # Vulkan and dynamically loaded ggml backends.
   DIST_FEATURES: engine/vulkan,engine/dynamic-backends
+  # The Rust version the packages are built with. Rust 1.100 lays the build directory out
+  # differently (`build/<package>/<hash>/out`), which the build script of llama-cpp-sys-2 and the
+  # packaging steps below do not expect: the Linux and Windows packages fail with it. This is the
+  # last version before it, until both follow.
+  RUST_VERSION: "1.99.1"
 
 jobs:
   version:
@@ -100,7 +105,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
 
       - uses: Swatinem/rust-cache@v2
 
@@ -138,7 +145,9 @@ jobs:
             libx11-xcb-dev \
             libvulkan-dev glslc spirv-headers
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
 
       # The cache key includes the rustc version, so a new stable release starts a new cache.
       - uses: Swatinem/rust-cache@v2
@@ -272,7 +281,9 @@ jobs:
           "GGML_OPENVINO=ON" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "CMAKE_PREFIX_PATH=D:/openvino/toolkit/runtime/cmake;D:/openvino/opencl" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
         id: toolchain
 
       # The llama-cpp-rs git dependency checks out llama.cpp as a submodule, which contains
