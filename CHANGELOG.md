@@ -2,7 +2,7 @@
 
 All notable changes to PLaMo Translate Desktop. Each release's section here also becomes its release notes on GitHub.
 
-## [Unreleased]
+## [0.6.0] - 2026-11-13
 
 ### Added
 
@@ -160,7 +160,7 @@ The first release.
 - English and Japanese UI, light and dark themes, and synchronized scrolling between the source and the translation.
 - Packages for Windows and Linux (x86-64), with third-party notices.
 
-[Unreleased]: https://github.com/tanakh/plamo-translate-desktop/compare/v0.5.0...HEAD
+[0.6.0]: https://github.com/tanakh/plamo-translate-desktop/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/tanakh/plamo-translate-desktop/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/tanakh/plamo-translate-desktop/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tanakh/plamo-translate-desktop/compare/v0.2.1...v0.3.0
