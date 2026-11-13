@@ -1,0 +1,11 @@
+# The Rust version the project is built with, here and in the workflows (RUST_VERSION in
+# .github/workflows/ci.yml and release.yml: keep them the same).
+#
+# Rust 1.100 lays the build directory out differently (`build/<package>/<hash>/out`, and no
+# `deps`), which the build script of llama-cpp-sys-2 does not expect: a build with
+# `engine/dynamic-backends` fails with it. This is the last version before it. Once llama-cpp-rs
+# follows, the places that go by the old layout here are `dev_backends_dir` in
+# crates/engine/src/llama.rs, the packaging steps of release.yml, and the README.
+[toolchain]
+channel = "1.99.1"
+components = ["clippy", "rustfmt"]

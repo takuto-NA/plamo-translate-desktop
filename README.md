@@ -198,7 +198,7 @@ the engine starts (after **Release**, or 5 minutes without use).
 
 ## Building from source
 
-Requirements: Rust 1.92 or later, CMake, and a C/C++ compiler.
+Requirements: Rust (rustup installs the version in `rust-toolchain.toml`), CMake, and a C/C++ compiler.
 
 Linux (Ubuntu or Debian):
 

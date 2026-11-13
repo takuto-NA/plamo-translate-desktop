@@ -22,10 +22,7 @@ env:
   CARGO_INCREMENTAL: 0
   # Vulkan and dynamically loaded ggml backends.
   DIST_FEATURES: engine/vulkan,engine/dynamic-backends
-  # The Rust version the packages are built with. Rust 1.100 lays the build directory out
-  # differently (`build/<package>/<hash>/out`), which the build script of llama-cpp-sys-2 and the
-  # packaging steps below do not expect: the Linux and Windows packages fail with it. This is the
-  # last version before it, until both follow.
+  # The Rust version the packages are built with: that of rust-toolchain.toml, which says why.
   RUST_VERSION: "1.99.1"
 
 jobs:

@@ -190,7 +190,7 @@ Linux の Snap 版や Flatpak 版のブラウザは、ホストを起動でき�
 
 ## ソースからのビルド
 
-必要なもの: Rust 1.92 以上、CMake、C/C++ コンパイラ。
+必要なもの: Rust（`rust-toolchain.toml` のバージョンを rustup がインストールします）、CMake、C/C++ コンパイラ。
 
 Linux（Ubuntu または Debian）:
 

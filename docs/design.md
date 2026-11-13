@@ -501,7 +501,7 @@ instead of being overwritten.
   the Vulkan SDK is installed by the workflow), not cross-compiled. Cross-compiling from Linux fails:
   - The `gpui-pre-windows` build script compiles its HLSL shaders with `fxc.exe` only when the build host is Windows.
   - Release builds then `include!` the generated shader bytes, so a Linux-hosted release build cannot compile.
-- CI runs on every push and pull request, with the latest stable Rust: rustfmt and clippy, and the tests, as parallel Linux jobs;
+- CI runs on every push and pull request, with the Rust version of `rust-toolchain.toml` (which says why it is fixed): rustfmt and clippy, and the tests, as parallel Linux jobs;
   clippy and the tests on macOS (Apple Silicon); and the extension's scripts and tests (Node).
   It builds no packages, so the slow parts (the Windows build, llama.cpp's Vulkan shaders, fat LTO) are not on every push.
 - Build configurations:
@@ -531,7 +531,7 @@ instead of being overwritten.
     The Linux app binary is 34.5 MB this way, against 73.7 MB for a release build with llama.cpp linked statically.
     Lints and tests run on Linux only, so Windows code is compiled only by the Release workflow.
   - The `translate` CLI is built and used for a smoke test (`--list-devices` with the package's own libraries), but it is not shipped.
-- The Release workflow builds the packages, with the latest stable Rust:
+- The Release workflow builds the packages, with the same Rust version:
   - Pushing a tag `vX.Y.Z` publishes a GitHub release with `SHA256SUMS.txt`. The tag must match the workspace version.
     The notes are the version's section of `CHANGELOG.md` (`scripts/changelog.sh`), followed by GitHub's generated notes.
   - A manual run (**Run workflow**, from any branch) builds the same packages as workflow artifacts without publishing,
